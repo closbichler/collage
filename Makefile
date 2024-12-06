@@ -1,8 +1,7 @@
-all: compile run
+all: compile
 
 compile:
 	gcc -o collage collage.c -Wall -lm
-
-run:
-	./collage
-	code -r fotos/collage_*.jpg
+	
+clean:
+	rm collage

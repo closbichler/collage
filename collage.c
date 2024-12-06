@@ -1,197 +1,90 @@
-#include <stdint.h>
 #include <stdio.h>
-#include <math.h>
+#include <dirent.h>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "std_image/stb_image.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+#include "std_image/stb_image_write.h"
 
-// CONFIG
-static const char FOLDER[] = "./fotos/";
-static const char FILENAME[] = "gitti.png";
-static const int SHRINK_FACTOR = 5;
-
-static const int DEBUG = 1;
+#include "collage.h"
 
 
-uint8_t* shrink_image(uint8_t* image, int width, int height, int* shrunk_width, int* shrunk_height) 
+static const int FILENAME_LENGTH = 100;
+static bool DEBUG_OUTPUT = false;
+static int SHRINK_FACTOR = 10;
+
+
+void print_usage()
 {
-    int factor = SHRINK_FACTOR;
-
-    uint channels = 3;
-    uint line_size = width * channels;
-    uint image_size = line_size * height;
-    
-    // divide scale and floor (int division = "truncate to zero")
-    *shrunk_width = width / factor;
-    *shrunk_height = height / factor;
-    uint shrunk_image_size = *shrunk_width * *shrunk_height * 3;
-    int diff_width = width - *shrunk_width * factor;
-
-    if (DEBUG) printf("malloc: %d\n", *shrunk_width * *shrunk_height * 3);
-    uint8_t* shrunk_image = malloc(*shrunk_width * *shrunk_height * 3);
-
-    uint8_t *img_i = image, *shrunk_img_i = shrunk_image;
-    int p=0;
-    while (img_i < image + image_size && 
-        shrunk_img_i < shrunk_image + shrunk_image_size)
-    {
-        // copy pixel
-        *shrunk_img_i = (uint8_t) *img_i;
-        *(shrunk_img_i+1) = (uint8_t) *(img_i+1);
-        *(shrunk_img_i+2) = (uint8_t) *(img_i+2);
-
-        // jump over factor-lines or factor-pixels
-        if (p % width >= width - factor)
-            p += width * (factor - 1) + factor + diff_width;
-        else 
-            p += factor; 
-
-        // go to next pixel
-        img_i = image + channels * p;
-        shrunk_img_i += channels;
-    }
-
-    return shrunk_image;
+    printf("Usage: collage [options] action input-image output-image [folder-of-images]\n");
+    printf("Actions:\n");
+    printf("\tfun\tCreate collage from single image and sin function\n");
+    printf("\tsingle\tCreate collage from single repeated image\n");
+    printf("\tmulti\tCreate collage from bunch of images (you have to provide folder-of-images)\n");
+    printf("Options:\n\t-h --help\tPrint help/usage\n");
+    printf("\t-v --verbose\tEnable verbose output\n");
 }
 
-void paste_image_at_pos(uint8_t *image_to, int width1, int height1, int channels1, 
-                        uint8_t *image_from, int width2, int height2, int channels2, 
-                        int x, int y, float tone) 
+char** get_all_filenames(char* folder, int* file_count)
 {
-    int image_from_size = channels2*width2*height2;
-    int image_to_size = channels1*width1*height1;
+    DIR *dir;
+    struct dirent *ent;
 
-    if (image_to_size < image_from_size)
+    if ((dir = opendir(folder)) == NULL)
     {
-        printf("not posible to paste onto smaller image");
-        return;
+        printf("Could not open directory");
+        return NULL;
     }
 
-    uint8_t* img_to_i = image_to, *img_from_i = image_from;
+    *file_count = -2;
+    while ((ent = readdir(dir)) != NULL) 
+        (*file_count)++;   
+    rewinddir(dir);
 
-    // go to x, y on image_to
-    img_to_i += channels1 * width1 * y + channels1 * x;
+    char** filenames = malloc(*file_count * sizeof(char*));
 
-    int p=1;
-    while (img_from_i < image_from + image_from_size && 
-            img_to_i < image_to + image_to_size)
+    int i=0;
+    while ((ent = readdir(dir)) != NULL)
     {
-        // copy pixel
-        *img_to_i = tone * (uint8_t) *img_from_i;
-        *(img_to_i + 1) = tone * (uint8_t) *(img_from_i+1);
-        *(img_to_i + 2) = tone * (uint8_t) *(img_from_i+2);
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
 
-        // jump over every other line
-        if (p % width2 == 0)
-        {
-            img_to_i += channels1 * (width1 - width2);
-        }
-
-        // go to next pixel
-        img_to_i += channels1;
-        img_from_i += channels2;
-        p++; 
+        filenames[i] = malloc(FILENAME_LENGTH * sizeof(char));
+        strcpy(filenames[i], ent->d_name);
+        i++;
     }
+
+    closedir(dir);
+    return filenames;
 }
 
-uint8_t *collage_from_function(uint8_t *image, int width, int height, int channels, int mode)
+void fun_collage()
 {
-    // float circle = fabs(sin(i*M_PI/f) * sin(j*M_PI/f));
-    return NULL;
+    printf("TBD\n");
 }
 
-
-uint8_t *collage_from_image(uint8_t *image, int width, int height, int channels,
-    int *collage_width, int *collage_height) 
+void single_collage(char* input_image, char* output_image)
 {
-    int resize = 1;
+    int shrink_factor = SHRINK_FACTOR;
 
-    uint image_size = width*height*channels;
-    *collage_width = width * width;
-    *collage_height = height * height;
-
-    float aspect_ratio = (float)width / (float) height;
-    float width_factor = 1, height_factor = 1;
-
-    if (resize)
-    {
-        if (aspect_ratio >= 1) 
-            width_factor = 1/aspect_ratio;
-        else
-            height_factor = aspect_ratio;
-    }
-
-    if (DEBUG) printf("ratio: %f, width_factor=%f, height_factor=%f\n", aspect_ratio, width_factor, height_factor);
-
-    *collage_width = (int) ((*collage_width) * width_factor);
-    *collage_height = (int) ((*collage_height) * height_factor);
-
-    if (DEBUG) printf("collage: width=%d, height=%d\n", *collage_width, *collage_height);
-    
-    int collage_size = (*collage_width) * (*collage_height) * channels;
-
-    if (DEBUG) printf("malloc: %d\n", collage_size);
-    uint8_t* collage = malloc(collage_size);
-
-    uint8_t* img_i = image;
-    if (resize)
-    {
-        img_i += (int) (channels * (width * (1 - width_factor) + height * (1 - height_factor) * width) / 2);
-    }
-
-    for (int i=0; i<height*height_factor; i++) 
-    {
-        for (int j=0; j<width*width_factor; j++) 
-        {
-            if (img_i > image + image_size) 
-                break;
-
-            int brightness = 0;
-            brightness += *img_i;
-            brightness += *(img_i+1);
-            brightness += *(img_i+2);
-
-            float factor = (float) brightness / (256*3);
-
-            paste_image_at_pos( 
-                collage, *collage_width, *collage_height, channels,
-                image, width, height, channels, 
-                j*width, i*height, factor
-            );
-
-            img_i += channels;
-        }
-
-        // manchmal brauchts dieses +1, manchmal nicht :(
-        if (resize)
-            img_i += (int)(height_factor * channels * (width * (1 - width_factor)) + 1);
-    }
-    
-    return collage;
-}
-
-int main() 
-{
     int width, height, bpp;
-    char path[50];
-    sprintf(path, "%s%s", FOLDER, FILENAME);
-    uint8_t* rgb_image = stbi_load(path, &width, &height, &bpp, 3);
+    uint8_t* rgb_image = stbi_load(input_image, &width, &height, &bpp, 3);
 
     if (rgb_image == NULL)
     {
-        printf("image wrong\n");
-        return 1;
+        printf("input_image wrong\n");
+        return;
     }
     
     if (DEBUG) printf("image: width=%d, height=%d, channels=%d\n", width, height, bpp);
 
     int shrunk_width, shrunk_height;
-    uint8_t* shrunk_image = shrink_image(
-        rgb_image, width, height, &shrunk_width, &shrunk_height
+    uint8_t* shrunk_image = shrink_image_factor(
+        rgb_image, width, height, &shrunk_width, &shrunk_height, shrink_factor
     );
+
+    stbi_image_free(rgb_image);
 
     if (DEBUG) printf("shrunk image: width=%d, height=%d\n", shrunk_width, shrunk_height);
 
@@ -200,16 +93,118 @@ int main()
         shrunk_image, shrunk_width, shrunk_height, 3,
         &collage_width, &collage_height
     );
-
-    char path_collage[50];
-    char path_shrunk[50];
-    sprintf(path_collage, "%scollage_%s", FOLDER, FILENAME);
-    sprintf(path_shrunk, "%sshrunk_%s", FOLDER, FILENAME);
-    stbi_write_jpg(path_collage, collage_width, collage_height, 3, collage, 60);
-    stbi_write_jpg(path_shrunk, shrunk_width, shrunk_height, 3, shrunk_image, 60);
-    stbi_image_free(rgb_image);
+    
+    stbi_write_jpg(output_image, collage_width, collage_height, 3, collage, 60);
+    
     stbi_image_free(shrunk_image);
     stbi_image_free(collage);
+}
+
+void multi_collage(char* input_image, char* output_image, char* image_folder)
+{
+    int file_count;
+    char** filenames = get_all_filenames(image_folder, &file_count);
+
+    if (DEBUG_OUTPUT)
+        printf("%d fotos found\n", file_count);
+
+    int desired_width = 80, desired_height = 60;
+
+    uint8_t *all_images[file_count];
+    float images_luminance[file_count];
+
+    for (int i=0; i<file_count; i++)
+    {
+        int width, height, bpp;
+        char path[50];
+        sprintf(path, "%s%s", image_folder, filenames[i]);
+        uint8_t* image = stbi_load(path, &width, &height, &bpp, 3);
+
+        uint8_t* image_cut = shrink_image_size(image, width, height, desired_width, desired_height);        
+        float Y = get_average_luminance(image_cut, desired_width, desired_height, bpp); 
+
+        all_images[i] = image_cut;
+        images_luminance[i] = Y;
+
+        printf("%d brightness %f of image %s\n", i, Y, filenames[i]);
+
+        free(image);
+    }
+
+    int creator_width, creator_height, creator_bpp;
+    uint8_t* creator_image = stbi_load(input_image, &creator_width, &creator_height, &creator_bpp, 3);
+    uint8_t* creator_shrunk = shrink_image_size(
+        creator_image, creator_width, creator_height,
+        80, 60
+    );
+
+    int collage_width = desired_width * desired_width,
+        collage_height = desired_height * desired_height;
+
+    uint8_t* collage = collage_from_images(
+        creator_shrunk, 80, 60, 3,
+        all_images, desired_width, desired_height, file_count,
+        images_luminance
+    );
+
+    stbi_write_jpg(output_image, collage_width, collage_height, 3, collage, 80);
+
+    for (int i=0; i<file_count; i++)
+        stbi_image_free(all_images[i]);
+    stbi_image_free(collage);
+    stbi_image_free(creator_image);
+    stbi_image_free(creator_shrunk);
+    free(filenames);
+}
+
+int main(int argc, char* argv[])
+{
+    if (argc < 4 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
+    {
+        print_usage();
+        return 0;
+    }
+
+    if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--verbose") == 0)
+    {
+        DEBUG_OUTPUT = true;
+        set_debug(DEBUG_OUTPUT);
+    }
+
+    char action[20];
+    char input_image[FILENAME_LENGTH];
+    char output_image[FILENAME_LENGTH];
+    if (argc == 4)
+    {
+        strcpy(action, argv[1]);
+        strcpy(input_image, argv[2]);
+        strcpy(output_image, argv[3]);
+    }
+    else
+    {
+        strcpy(action, argv[2]);
+        strcpy(input_image, argv[3]);
+        strcpy(output_image, argv[4]);
+    }
+
+    if (strcmp(action, "multi") == 0 && argc >= 5)
+    {
+        char image_folder[100];
+        strcpy(image_folder, argv[argc-1]);
+        multi_collage(input_image, output_image, image_folder);
+    }
+    else if (strcmp(action, "fun") == 0)
+    {
+        fun_collage(input_image, output_image);
+    }
+    else if (strcmp(action, "single") == 0)
+    {
+        single_collage(input_image, output_image);
+    }
+    else
+    {
+        print_usage();
+    }
 
     return 0;
 }
