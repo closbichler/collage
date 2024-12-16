@@ -11,19 +11,26 @@
 #include "collage.h"
 
 
-static const int FILENAME_LENGTH = 100;
-static const int SHRINK_FACTOR = 10;
-static const int FOTO_LIMIT = 600;
-static bool VERBOSE_OUTPUT = false;
-static bool DEBUG_OUTPUT = false;
+/* Configuration */
 
+static const int SHRINK_FACTOR = 10;    // for fun and single
+static const int FOTO_LIMIT = 600;      // for multi
+static bool VERBOSE_OUTPUT = false;     // can be set with -v
+static bool DEBUG_OUTPUT = false;       // can be set with -d
+
+/* Constants */
+
+static const int FILENAME_LENGTH = 100;
+
+
+/* Miscellaneous methods */
 
 void print_usage()
 {
     printf("Usage: collage [options] ..\n");
     printf("\tshrink input-image output-path\tShrink image\n");
-    printf("\tfun input-image output-path\tCreate collage from single image and sin function\n");
-    printf("\tsingle input-image output-path\tCreate collage from single repeated image\n");
+    printf("\tsingle input-image output-path mode\tCreate collage from single repeated image\n");
+    printf("\t\tmode\t0 = based on input-image, 1 = circle\n");
     printf("\tmulti input-image folder-of-images output-path collage-size jpg-quality\tCreate collage from bunch of images\n");
     printf("\t\tcollage-size\t\"A1\", \"A2\", \"A3\", \"A4\" or \"widthxheight\"\n");
     printf("\t\tjpg-quality\tNumber between 0 and 100\n");
@@ -39,7 +46,7 @@ char** get_all_filenames(char* folder, int* file_count)
 
     if ((dir = opendir(folder)) == NULL)
     {
-        printf("ERR: Could not open directory \"%s\"\n", folder);
+        fprintf(stderr, "ERR: Could not open directory \"%s\"\n", folder);
         return NULL;
     }
 
@@ -67,10 +74,8 @@ char** get_all_filenames(char* folder, int* file_count)
     return filenames;
 }
 
-void fun_collage(char* input_image, char* output_image)
-{
-    printf("TBD\n");
-}
+
+/* Implementation */
 
 void shrink_collage(char* input_image, char* output_image)
 {
@@ -105,7 +110,7 @@ void shrink_collage(char* input_image, char* output_image)
 
     if (shrunk_image == NULL)
     {
-        printf("ERR: fault on resize method\n");
+        fprintf(stderr, "ERR: fault on resize method\n");
     }
     else 
     {
@@ -117,7 +122,7 @@ void shrink_collage(char* input_image, char* output_image)
     stbi_image_free(shrunk_image);
 }
 
-void single_collage(char* input_image, char* output_image)
+void single_collage(char* input_image, char* output_image, int mode)
 {
     int shrink_factor = SHRINK_FACTOR;
     int width, height, bpp;
@@ -143,7 +148,7 @@ void single_collage(char* input_image, char* output_image)
     int collage_width, collage_height;
     uint8_t* collage = collage_from_single_image(
         shrunk_image, shrunk_width, shrunk_height, 3,
-        &collage_width, &collage_height
+        &collage_width, &collage_height, mode
     );
     
     stbi_write_jpg(output_image, collage_width, collage_height, 3, collage, 60);
@@ -190,7 +195,7 @@ void multi_collage(
 
             if (width_cand == -1 || height_cand == -1)
             {
-                printf("ERR: collage_size wrong %sx%s\n", collage_size_identifier, pos_of_x);
+                fprintf(stderr, "ERR: collage_size wrong %sx%s\n", collage_size_identifier, pos_of_x);
                 return;
             }
 
@@ -199,7 +204,7 @@ void multi_collage(
         }
         else
         {
-            printf("ERR: collage_size wrong \"%s\"\n", collage_size_identifier);
+            fprintf(stderr, "ERR: collage_size wrong \"%s\"\n", collage_size_identifier);
             return;
         }        
     }
@@ -232,9 +237,11 @@ void multi_collage(
     int creator_width, creator_height, creator_bpp;
     uint8_t* creator_image = stbi_load(input_image_path, &creator_width, &creator_height, &creator_bpp, 3);
 
+    if (VERBOSE_OUTPUT) printf("Main image loaded with %dx%dx%d\n", creator_width, creator_height, creator_bpp);
+
     if (creator_image == NULL)
     {
-        printf("ERR: input_image wrong\n");
+        fprintf(stderr, "ERR: input_image wrong\n");
         return;
     }
     
@@ -270,6 +277,7 @@ void multi_collage(
     for (int i=0; i<foto_count; i++)
     {
         if (!VERBOSE_OUTPUT) printf(".");
+        if (!VERBOSE_OUTPUT) fflush(stdout);
 
         int width, height, bpp;
         char path[200];
@@ -306,7 +314,7 @@ void multi_collage(
 
     if (suitable_foto_count == 0) 
     {
-        printf("ERR: probably wrong image folder\n");
+        fprintf(stderr, "ERR: probably wrong image folder\n");
         free(filenames);
         return;
     } 
@@ -385,9 +393,9 @@ int main(int argc, char* argv[])
     strcpy(action, argv[1 + no_options]);
     strcpy(input_image, argv[2 + no_options]);
 
-    if (strcmp(action, "multi") == 0 && argc >= 5)
+    if (strcmp(action, "multi") == 0 && argc >= 7)
     {
-        char image_folder[100], collage_size_id[50], jpg_quality_str[50];
+        char image_folder[FILENAME_LENGTH], collage_size_id[20], jpg_quality_str[5];
         int jpg_quality; 
         strcpy(image_folder, argv[3 + no_options]);
         strcpy(output_image, argv[4 + no_options]);
@@ -406,15 +414,14 @@ int main(int argc, char* argv[])
         strcpy(output_image, argv[3 + no_options]);
         shrink_collage(input_image, output_image);
     }
-    else if (strcmp(action, "fun") == 0)
-    {
-        strcpy(output_image, argv[3 + no_options]);
-        fun_collage(input_image, output_image);
-    }
     else if (strcmp(action, "single") == 0)
     {
+        char mode_str[4];
+        int mode;
         strcpy(output_image, argv[3 + no_options]);
-        single_collage(input_image, output_image);
+        strcpy(mode_str, argv[4 + no_options]);
+        mode = atoi(mode_str);
+        single_collage(input_image, output_image, mode);
     }
     else
     {
@@ -425,7 +432,7 @@ int main(int argc, char* argv[])
     clock_t end_time = clock();
     double exec_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     printf("Time: %.4f s, ", exec_time);
-    printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0f);
-
+    printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0d);
+    
     return 0;
 }

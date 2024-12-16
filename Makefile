@@ -8,6 +8,6 @@ compile:
 	
 test:
 	./collage shrink fotos/nehammer.jpg test-shrink.jpg
-	./collage fun fotos/nehammer.jpg test-fun.jpg
-	./collage single fotos/nehammer.jpg test-single.jpg
+	./collage single fotos/nehammer.jpg test-single.jpg 0
+	./collage single fotos/nehammer.jpg test-fun.jpg 1
 	./collage multi fotos/nehammer.jpg fotos/nehammer/ test-multi.jpg 2000x2000 50

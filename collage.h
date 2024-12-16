@@ -8,7 +8,7 @@
 
 /* Configuration */
 
-static const bool MODE_CONTOUR = false;
+static const bool MODE_CONTOUR = true;
 
 
 /* Constants */
@@ -27,10 +27,15 @@ static const float LUMINANCE_GREEN = 0.7152f;
 static const float LUMINANCE_BLUE = 0.0722f;
 static const float LUMINANCE_POWER_CURVE = 2.2f;
 
-static unsigned long TOTAL_MALLOC = 0;
+
+/* Global variables */
+
+extern unsigned long TOTAL_MALLOC;
+
+
+/* Typedefs */
 
 struct image_structure_t { float y1, y2, y3, y4; };
-
 
 
 /* Helper methods */
@@ -71,9 +76,8 @@ bool paste_image_at_pos(uint8_t *image_to, int width1, int height1, int channels
                         uint8_t *image_from, int width2, int height2, int channels2, 
                         int x, int y, float tone);
 
-uint8_t* collage_from_function(uint8_t *image, int width, int height, int channels, int mode);
 uint8_t* collage_from_single_image(uint8_t *image, int width, int height, int channels,
-                                   int *collage_width, int *collage_height);
+                                   int *collage_width, int *collage_height, int mode);
 uint8_t* collage_from_multiple_images(
     uint8_t *creator_image, int creator_width, int creator_height, int channels,
     uint8_t **image_array, int image_width, int image_height, int image_count,

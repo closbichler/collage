@@ -4,8 +4,10 @@
 #include <stdio.h>
 #include <math.h>
 
+
 static bool DEBUG = false;
 static bool DEBUG_MALLOC = false;
+unsigned long TOTAL_MALLOC = 0;
 
 
 void print_malloc(size_t size, bool print_always)
@@ -217,7 +219,7 @@ uint8_t* shrink_image_size(
 {
     if (shrunk_width > width || shrunk_height > height)
     {
-        printf("ERR: Shrunk has to be smaller\n");
+        fprintf(stderr, "ERR: Shrunk has to be smaller\n");
         return (uint8_t*) NULL;
     }
 
@@ -283,12 +285,12 @@ bool paste_image_at_pos(
 
     if (image_to_size < image_from_size)
     {
-        if (DEBUG) printf("ERR: Not posible to paste onto smaller image\n");
+        if (DEBUG) fprintf(stderr, "ERR: Not posible to paste onto smaller image\n");
         return false;
     }
     else if ((x + width2 > width1) || (y + height2 > height1))
     {
-        if (DEBUG) printf("ERR: Paste coordinates out of bounds\n");
+        if (DEBUG) fprintf(stderr, "ERR: Paste coordinates out of bounds\n");
         return false;
     }
 
@@ -322,16 +324,9 @@ bool paste_image_at_pos(
     return true;
 }
 
-uint8_t* collage_from_function(uint8_t *image, int width, int height, int channels, int mode)
-{
-    // float circle = fabs(sin(i*M_PI/f) * sin(j*M_PI/f));
-    // TODO
-    return NULL;
-}
-
 uint8_t* collage_from_single_image(
     uint8_t *image, int width, int height, int channels,
-    int *collage_width, int *collage_height) 
+    int *collage_width, int *collage_height, int mode) 
 {
     int image_size = width * height * channels;
     *collage_width = width * width;
@@ -363,7 +358,13 @@ uint8_t* collage_from_single_image(
     {
         for (int j=0; j<width*width_factor; j++) 
         {
-            float Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+            float Y;
+            switch (mode)
+            {
+                default: 
+                case 0: Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2)); break;
+                case 1: Y = fabs(sin(i*M_PI / height) * sin(j*M_PI / height)); break;
+            }
 
             bool paste_success = paste_image_at_pos( 
                 collage, *collage_width, *collage_height, channels,
