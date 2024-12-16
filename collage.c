@@ -1,364 +1,584 @@
-#include <stdio.h>
-#include <dirent.h>
-#include <time.h>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "std_image/stb_image.h"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "std_image/stb_image_write.h"
-
-#define STB_IMAGE_RESIZE2_IMPLEMENTATION
-#include "std_image/stb_image_resize2.h"
-
 #include "collage.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
 
-static const int FILENAME_LENGTH = 100;
-static const int SHRINK_FACTOR = 10;
-static const int FOTO_LIMIT = 50;
-static bool DEBUG_OUTPUT = false;
+static bool DEBUG = false;
+static bool DEBUG_MALLOC = false;
 
 
-void print_usage()
-{
-    printf("Usage: collage [options] action input-image output-image [folder-of-images]\n");
-    printf("Actions:\n");
-    printf("\tshrink\tShrink image\n");
-    printf("\tfun\tCreate collage from single image and sin function\n");
-    printf("\tsingle\tCreate collage from single repeated image\n");
-    printf("\tmulti\tCreate collage from bunch of images (you have to provide folder-of-images)\n");
-    printf("Options:\n\t-h --help\tPrint help/usage\n");
-    printf("\t-v --verbose\tEnable verbose output\n");
-}
+void print_malloc(size_t size, bool print_always)
+{   
+    TOTAL_MALLOC += size;
 
-char** get_all_filenames(char* folder, int* file_count)
-{
-    DIR *dir;
-    struct dirent *ent;
-
-    if ((dir = opendir(folder)) == NULL)
+    if (DEBUG_MALLOC || print_always)
     {
-        printf("Could not open directory");
-        return NULL;
-    }
-
-    *file_count = -2;
-    while ((ent = readdir(dir)) != NULL) 
-        (*file_count)++;   
-    rewinddir(dir);
-
-    char** filenames = malloc(*file_count * sizeof(char*));
-
-    int i=0;
-    while ((ent = readdir(dir)) != NULL)
-    {
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
-            continue;
-
-        filenames[i] = malloc(FILENAME_LENGTH * sizeof(char));
-        strcpy(filenames[i], ent->d_name);
-        i++;
-    }
-
-    closedir(dir);
-    return filenames;
-}
-
-void fun_collage(char* input_image, char* output_image)
-{
-    printf("TBD\n");
-}
-
-void shrink_collage(char* input_image, char* output_image)
-{
-    int shrink_width = 200, shrink_height = 200;
-    int shrink_algorithm = 1;
-
-    int width, height, bpp;
-    uint8_t* image = stbi_load(input_image, &width, &height, &bpp, 3);
-
-    if (image == NULL)
-    {
-        printf("input_image wrong\n");
-        return;
-    }
-    
-    if (DEBUG_OUTPUT) printf("Shrink with algorithm %d\n", shrink_algorithm);
-
-    uint8_t* shrunk_image;
-    switch (shrink_algorithm)
-    {
-        case 0: default:
-            shrunk_image = stbir_resize_uint8_linear(
-                image, width, height, 0,
-                0, shrink_width, shrink_height, 0,
-                STBIR_RGB
-            );
-
-            if (shrunk_image == NULL)
-                printf("ERR: fault on resize method\n");
-            break;
-        case 1:
-            shrunk_image = shrink_image_size(
-                image, width, height, bpp, shrink_width, shrink_height
-            );
-            break;
-        case 2:
-            shrunk_image = shrink_image_factor(
-                image, width, height, &shrink_width, &shrink_height, 5
-            );
-    }
-
-    if (DEBUG_OUTPUT) printf("Shrunk to size %dx%d\n", shrink_width, shrink_height);
-
-    stbi_write_jpg(output_image, shrink_width, shrink_height, 3, shrunk_image, 90);
-    stbi_image_free(image);
-    stbi_image_free(shrunk_image);
-}
-
-void single_collage(char* input_image, char* output_image)
-{
-    if (DEBUG_OUTPUT) 
-    {
-        printf("Shrink image %s by factor %d write collage to %s\n", input_image, SHRINK_FACTOR, output_image);
-        printf("---\n");
-    }
-
-    int shrink_factor = SHRINK_FACTOR;
-    int width, height, bpp;
-    uint8_t* image = stbi_load(input_image, &width, &height, &bpp, 3);
-
-    if (image == NULL)
-    {
-        printf("input_image wrong\n");
-        return;
-    }
-    
-    if (DEBUG) printf("image: width=%d, height=%d, channels=%d\n", width, height, bpp);
-
-    int shrunk_width, shrunk_height;
-    uint8_t* shrunk_image = shrink_image_factor(
-        image, width, height, &shrunk_width, &shrunk_height, shrink_factor
-    );
-
-    stbi_image_free(image);
-
-    if (DEBUG) printf("shrunk image: width=%d, height=%d\n", shrunk_width, shrunk_height);
-
-    int collage_width, collage_height;
-    uint8_t* collage = collage_from_single_image(
-        shrunk_image, shrunk_width, shrunk_height, 3,
-        &collage_width, &collage_height
-    );
-    
-    stbi_write_jpg(output_image, collage_width, collage_height, 3, collage, 60);
-
-    stbi_image_free(shrunk_image);
-    stbi_image_free(collage);
-}
-
-void multi_collage(char* input_image_path, char* output_image_path, char* image_folder)
-{
-    if (DEBUG_OUTPUT) 
-    {
-        printf("Create collage from %s and write to %s\n", input_image_path, output_image_path);
-        printf("---\n");
-    }
-
-    int collage_width = A2_WIDTH, 
-        collage_height = A2_HEIGHT;
-    int fotos_per_row = 100;
-    int border_size_guidance = 40;
-
-    int foto_width = floor((float) collage_width / fotos_per_row),
-        foto_height = foto_width;
-    int fotos_horiz = (int) floor((float)(collage_width - 2*border_size_guidance) / foto_width),
-        fotos_vert = (int) floor((float)(collage_height - 2*border_size_guidance) / foto_height);
-    int collage_inner_width = foto_width * fotos_horiz,
-        collage_inner_height = foto_height * fotos_vert;
-    int border_left = floor((collage_width - collage_inner_width) / 2.0f),
-        border_right = ceil((collage_width - collage_inner_width) / 2.0f),
-        border_top = floor((collage_height - collage_inner_height) / 2.0f),
-        border_bottom = ceil((collage_height - collage_inner_height) / 2.0f);
-
-    printf("collage fotos: %dx%d\n", fotos_horiz, fotos_vert);
-    printf("foto dimensions: %dx%d px\n", foto_width, foto_height);
-    
-    if (DEBUG_OUTPUT)
-    {
-        printf("collage inner dimensions: %dx%d px\n", collage_inner_width, collage_inner_height);
-        printf("border (t,r,b,l): %d, %d, %d, %d px\n", 
-            border_top, border_right, border_bottom, border_left);
-    }
-
-    int foto_count, suitable_foto_count = 0;
-    char** filenames = get_all_filenames(image_folder, &foto_count);
-    if (DEBUG_OUTPUT) printf("%d fotos found\n", foto_count);
-
-    foto_count = fmin(foto_count, FOTO_LIMIT);
-    uint8_t *all_images[foto_count];
-    float images_luminance[foto_count];
-    struct image_structure_t images_structure[foto_count];
-
-    if (!DEBUG_OUTPUT) printf("load images");
-    for (int i=0; i<foto_count; i++)
-    {
-        if (!DEBUG_OUTPUT) printf(".");
-
-        int width, height, bpp;
-        char path[200];
-        sprintf(path, "%s/%s", image_folder, filenames[i]);
-        uint8_t* image = stbi_load(path, &width, &height, &bpp, 3);
-
-        if (image == NULL ||
-            width < foto_width || height < foto_height || bpp != 3)
+        printf("MALLOC: ");
+        if (size < 1000)
         {
-            all_images[i] = NULL;
-            images_luminance[i] = 0;
-            images_structure[i] = null_structure;
-            if (DEBUG) printf("WARN: foto %s not suitable with %dx%d\n", filenames[i], width, height);
-            continue;
+            printf("%lu B", size);
+        }
+        else if (size < 1000000)
+        {
+            double kb = (size) / 1000.0d;
+            printf("%.4f KB", kb);
+        }
+        else
+        {
+            double mb = (size) / 1000000.0d;
+            printf("%.4f MB", mb);
+        }
+        printf("\n");
+    }
+}
+
+void set_debug(bool debug)
+{
+    DEBUG = debug;
+}
+
+float get_point_luminance(uint8_t r, uint8_t g, uint8_t b)
+{
+    float Y = 0;
+    float red_normalized = r / 256.0f;
+    float green_normalized = g / 256.0f;
+    float blue_normalized = b / 256.0f;
+    Y += pow(red_normalized, LUMINANCE_POWER_CURVE) * LUMINANCE_RED;
+    Y += pow(green_normalized, LUMINANCE_POWER_CURVE) * LUMINANCE_GREEN;
+    Y += pow(blue_normalized, LUMINANCE_POWER_CURVE) * LUMINANCE_BLUE;
+    return Y;
+}
+
+float get_point_brightness(int r, int g, int b)
+{
+    return (r + g + b) / (255 * 3.f);
+}
+
+float get_average_luminance(uint8_t* image, int width, int height, int channels)
+{   
+    float Y_sum = 0;
+    
+    int image_size = width * height * channels;
+    uint8_t *img_i = image;
+    while (img_i < image + image_size)
+    {
+        Y_sum += get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+        img_i += channels;
+    }
+
+    return Y_sum / (width*height);
+}
+
+struct image_structure_t get_image_structure(uint8_t* image, int width, int height, int channels)
+{
+    struct image_structure_t Y;
+    int image_size = width * height * channels;
+    int quarter_area = width * height / 4;
+    Y.y1 = 0; Y.y2 = 0; Y.y3 = 0; Y.y4 = 0;
+
+    int p = 0;
+    uint8_t* img_i = image;
+    while (p < quarter_area && img_i < image + image_size)
+    {
+        Y.y1 += get_point_brightness(*img_i, *(img_i+1), *(img_i+2));
+        img_i += channels;
+        p++;
+
+        if (p % (width/2) == 0 && p != 0) 
+            img_i += channels * (width/2);
+    }
+
+    p = 0;
+    img_i = image + (channels * width/2);
+    while (p < quarter_area && img_i < image + image_size)
+    {
+        Y.y2 += get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+        img_i += channels;
+        p++;
+
+        if (p % (width/2) == 0 && p != 0) 
+            img_i += channels * (width/2);
+    }
+
+    p = 0;
+    img_i = image + (channels * width * height/2);
+    while (p < quarter_area && img_i < image + image_size)
+    {
+        Y.y3 += get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+        img_i += channels;
+        p++;
+
+        if (p % (width/2) == 0 && p != 0) 
+            img_i += channels * (width/2);
+    }
+
+    p = 0;
+    img_i = image + (channels * width * height/2) + (channels * width/2);
+    while (p < quarter_area && img_i < image + image_size)
+    {
+        Y.y4 += get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+        img_i += channels;
+        p++;
+
+        if (p % (width/2) == 0 && p != 0)
+            img_i += channels * (width/2);
+    }
+
+    Y.y1 /= quarter_area;
+    Y.y2 /= quarter_area;
+    Y.y3 /= quarter_area;
+    Y.y4 /= quarter_area;
+
+    return Y;
+}
+
+float get_structure_difference(struct image_structure_t s1, struct image_structure_t s2)
+{
+    return (abs(s1.y1 - s2.y1) + abs(s1.y2 - s2.y2) + 
+            abs(s1.y3 - s2.y3) + abs(s1.y4 - s2.y4))/4;
+}
+
+struct image_structure_t get_null_structure()
+{
+    struct image_structure_t s = { -1.0f, -1.0f, -1.0f, -1.0f };
+    return  s;
+}
+
+bool is_null_structure(struct image_structure_t s)
+{
+    return (s.y1 == -1.0f && s.y2 == -1.0f && s.y3 == -1.0f && s.y4 == -1.0f);
+}
+
+void copy_pixel(uint8_t* image_to, uint8_t* image_from, int channels)
+{
+    for (int i=0; i<channels; i++)
+    {
+        *(image_to + i) = (uint8_t) *(image_from + i);
+    }
+}
+
+uint8_t* put_pixels(uint8_t* image, int amount, int r, int g, int b)
+{
+    for (int i=0; i<amount; i++)
+    {
+        *image = r;
+        *(image+1) = g;
+        *(image+2) = b;
+        image += 3;
+    }
+    return image;
+}
+
+uint8_t* shrink_image_factor(
+    uint8_t* image, int width, int height,
+    int* shrunk_width, int* shrunk_height, int factor) 
+{
+    uint channels = 3;
+    uint line_size = width * channels;
+    uint image_size = line_size * height;
+    
+    // divide scale and floor (int division = "truncate to zero")
+    *shrunk_width = width / factor;
+    *shrunk_height = height / factor;
+    uint shrunk_image_size = *shrunk_width * *shrunk_height * 3;
+    int diff_width = width - *shrunk_width * factor;
+
+    print_malloc(shrunk_image_size, false);
+    uint8_t* shrunk_image = malloc(shrunk_image_size);
+
+    uint8_t *img_i = image, *shrunk_img_i = shrunk_image;
+    int p=0;
+    while (img_i < image + image_size && 
+        shrunk_img_i < shrunk_image + shrunk_image_size)
+    {
+        // copy pixel
+        *shrunk_img_i = (uint8_t) *img_i;
+        *(shrunk_img_i+1) = (uint8_t) *(img_i+1);
+        *(shrunk_img_i+2) = (uint8_t) *(img_i+2);
+
+        // jump over factor-lines or factor-pixels
+        if (p % width >= width - factor)
+            p += width * (factor - 1) + factor + diff_width;
+        else 
+            p += factor; 
+
+        // go to next pixel
+        img_i = image + channels * p;
+        shrunk_img_i += channels;
+    }
+
+    return shrunk_image;
+}
+
+uint8_t* shrink_image_size(
+    uint8_t* image, int width, int height, int channels,
+    int shrunk_width, int shrunk_height) 
+{
+    if (shrunk_width > width || shrunk_height > height)
+    {
+        printf("ERR: Shrunk has to be smaller\n");
+        return (uint8_t*) NULL;
+    }
+
+    size_t shrunk_image_size = shrunk_width * shrunk_height * channels;
+
+    double width_factor = width / (double)shrunk_width,
+           height_factor = height / (double)shrunk_height;
+    double diff_width = 0,
+           diff_height = 0;
+    double shrink_factor;
+
+    if (width_factor <= height_factor)
+    {
+        shrink_factor = width_factor;
+        diff_height = height/shrink_factor - shrunk_height;
+    }
+    else
+    {
+        shrink_factor = height_factor;
+        diff_width = width/shrink_factor - shrunk_width;
+    }
+
+    print_malloc(shrunk_image_size, false);
+    uint8_t* shrunk_image = malloc(shrunk_image_size);
+
+    for (int y=0; y<shrunk_height; y++)
+    {
+        for (int x=0; x<shrunk_width; x++)
+        {
+            double x_src = (x * shrink_factor + diff_width), 
+                   y_src = (y * shrink_factor + diff_height);
+            int x1 = (int) x_src, x2 = x1 + 1;
+            int y1 = (int) y_src, y2 = y1 + 1;
+
+            double x_weight = x_src - x1;
+            double y_weight = y_src - y1;
+
+            uint8_t* p1 = image + (y1 * width + x1) * channels;
+            uint8_t* p2 = image + (y1 * width + x2) * channels;
+            uint8_t* p3 = image + (y2 * width + x1) * channels;
+            uint8_t* p4 = image + (y2 * width + x2) * channels;
+
+            for (int c = 0; c < channels; ++c) {
+                double value = (1 - x_weight) * (1 - y_weight) * p1[c] +
+                                x_weight * (1 - y_weight) * p2[c] +
+                               (1 - x_weight) * y_weight * p3[c] +
+                                x_weight * y_weight * p4[c];
+                shrunk_image[(y * shrunk_width + x) * channels + c] = (uint8_t)value;
+            }
+        }
+    }
+
+    return shrunk_image;
+}
+
+bool paste_image_at_pos(
+    uint8_t *image_to, int width1, int height1, int channels1, 
+    uint8_t *image_from, int width2, int height2, int channels2, 
+    int x, int y, float tone) 
+{
+    int image_to_size = channels1 * width1 * height1;
+    int image_from_size = channels2 * width2 * height2;
+
+    if (image_to_size < image_from_size)
+    {
+        if (DEBUG) printf("ERR: Not posible to paste onto smaller image\n");
+        return false;
+    }
+    else if ((x + width2 > width1) || (y + height2 > height1))
+    {
+        if (DEBUG) printf("ERR: Paste coordinates out of bounds\n");
+        return false;
+    }
+
+    uint8_t *img_to_i = image_to,
+            *img_from_i = image_from;
+
+    // go to x, y on image_to
+    img_to_i += channels1 * width1 * y + channels1 * x;
+
+    int p=1;
+    while (img_from_i < image_from + image_from_size && 
+            img_to_i < image_to + image_to_size)
+    {
+        // copy pixel
+        *img_to_i = tone * (uint8_t) *img_from_i;
+        *(img_to_i + 1) = tone * (uint8_t) *(img_from_i+1);
+        *(img_to_i + 2) = tone * (uint8_t) *(img_from_i+2);
+
+        // jump over every other line
+        if (p % width2 == 0)
+        {
+            img_to_i += channels1 * (width1 - width2);
         }
 
-        uint8_t* image_cut = shrink_image_size(
-            image, width, height, bpp, foto_width, foto_height
-        );        
-        float Y = get_average_luminance(image_cut, foto_width, foto_height, bpp); 
-        all_images[i] = image_cut;
-        images_luminance[i] = Y;
-        struct image_structure_t s_image = get_image_structure(
-            image_cut, foto_width, foto_height, bpp
-        );
-        images_structure[i] = s_image;
-
-        if (DEBUG_OUTPUT) printf("%d brightness %f of image %s\n", i, Y, filenames[i]);
-        stbi_image_free(image);
-        suitable_foto_count++;
+        // go to next pixel
+        img_to_i += channels1;
+        img_from_i += channels2;
+        p++; 
     }
 
-    if (suitable_foto_count == 0) 
-    {
-        printf("ERR: probably wrong image folder\n");
-        free(filenames);
-        return;
-    } 
-    
-
-    /*  Load creator image and shrink  */
-    if (DEBUG_OUTPUT) printf("Load main image\n");
-
-    int creator_width, creator_height, creator_bpp;
-    uint8_t* creator_image = stbi_load(input_image_path, &creator_width, &creator_height, &creator_bpp, 3);
-
-    if (creator_image == NULL)
-    {
-        printf("ERR: input_image wrong\n");
-        for (int i=0; i<foto_count; i++) stbi_image_free(all_images[i]);
-        free(filenames);
-        return;
-    }
-    
-    uint8_t* creator_shrunk = shrink_image_size(
-        creator_image, creator_width, creator_height, creator_bpp,
-        fotos_horiz, fotos_vert
-    );
-
-    if (DEBUG_OUTPUT) printf("Main image %s with dim %dx%d px\n", input_image_path, creator_width, creator_height);
-    stbi_write_jpg("main-image.jpg", fotos_horiz, fotos_vert, 3, creator_shrunk, 80);
-    stbi_image_free(creator_image);
-
-
-    /*  Create collage  */
-    uint8_t* collage_inner = collage_from_multiple_images(
-        creator_shrunk, fotos_horiz, fotos_vert, 3,
-        all_images, foto_width, foto_height, foto_count,
-        images_luminance, images_structure
-    );
-
-    // stbi_write_jpg("without-border.jpg", collage_inner_width, collage_inner_height, 3, collage_inner, 80);
-    stbi_image_free(creator_shrunk);
-    for (int i=0; i<foto_count; i++) stbi_image_free(all_images[i]);
-
-
-    /*  Add border  */
-    if (DEBUG) printf("add border: %d %d %d %d px\n", border_top, border_right, border_bottom, border_left);
-    
-    uint8_t* collage_with_border = add_border(
-        collage_inner, collage_inner_width, collage_inner_height, 3, 
-        border_top, border_bottom, border_left, border_right, 
-        255, 255, 255
-    );
-    stbi_write_jpg(output_image_path, collage_width, collage_height, 3, collage_with_border, 80);
-    stbi_image_free(collage_with_border);
-
-    stbi_image_free(collage_inner);
-    free(filenames);
+    return true;
 }
 
-int main(int argc, char* argv[])
+uint8_t* collage_from_function(uint8_t *image, int width, int height, int channels, int mode)
 {
-    if (argc < 4 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
-    {
-        print_usage();
-        return 0;
-    }
+    // float circle = fabs(sin(i*M_PI/f) * sin(j*M_PI/f));
+    // TODO
+    return NULL;
+}
 
-    int no_options = 0;
+uint8_t* collage_from_single_image(
+    uint8_t *image, int width, int height, int channels,
+    int *collage_width, int *collage_height) 
+{
+    int image_size = width * height * channels;
+    *collage_width = width * width;
+    *collage_height = height * height;
 
-    if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--verbose") == 0)
-    {
-        DEBUG_OUTPUT = true;
-        set_debug(DEBUG_OUTPUT);
-        no_options++;
-    }
+    float aspect_ratio = (float)width / (float) height;
+    float width_factor = 1, height_factor = 1;
 
-    clock_t start_time = clock();
-
-    char action[20];
-    char input_image[FILENAME_LENGTH];
-    char output_image[FILENAME_LENGTH];
-    if (argc == 4)
-    {
-        strcpy(action, argv[1]);
-        strcpy(input_image, argv[2]);
-        strcpy(output_image, argv[3]);
-    }
+    if (aspect_ratio >= 1) 
+        width_factor = 1/aspect_ratio;
     else
-    {
-        strcpy(action, argv[1 + no_options]);
-        strcpy(input_image, argv[2 + no_options]);
-        strcpy(output_image, argv[3 + no_options]);
-    }
+        height_factor = aspect_ratio;
 
-    if (strcmp(action, "multi") == 0 && argc >= 5)
-    {
-        char image_folder[100];
-        strcpy(image_folder, argv[argc-1]);
-        multi_collage(input_image, output_image, image_folder);
-    }
-    else if (strcmp(action, "shrink") == 0)
-    {
-        shrink_collage(input_image, output_image);
-    }
-    else if (strcmp(action, "fun") == 0)
-    {
-        fun_collage(input_image, output_image);
-    }
-    else if (strcmp(action, "single") == 0)
-    {
-        single_collage(input_image, output_image);
-    }
-    else
-    {
-        printf("what is this action?? \"%s\"\n\n", action);
-        print_usage();
-    }
+    if (DEBUG) printf("ratio: %f, width_factor=%f, height_factor=%f\n", aspect_ratio, width_factor, height_factor);
 
-    clock_t end_time = clock();
-    double exec_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    printf("Time: %.4f s, ", exec_time);
-    printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0f);
+    *collage_width = (int) ((*collage_width) * width_factor);
+    *collage_height = (int) ((*collage_height) * height_factor);
 
+    if (DEBUG) printf("collage: width=%d, height=%d\n", *collage_width, *collage_height);
+    
+    size_t collage_size = (*collage_width) * (*collage_height) * channels;
+    print_malloc(collage_size, false);
+    uint8_t* collage = malloc(collage_size);
+
+    uint8_t* img_i = image;
+    img_i += (int) (channels * (width * (1 - width_factor) + height * (1 - height_factor) * width) / 2);
+
+    for (int i=0; i<height*height_factor; i++) 
+    {
+        for (int j=0; j<width*width_factor; j++) 
+        {
+            float Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+
+            bool paste_success = paste_image_at_pos( 
+                collage, *collage_width, *collage_height, channels,
+                image, width, height, channels, 
+                j*width, i*height, Y
+            );
+
+            img_i += channels;
+
+            if (!paste_success || (img_i >= image + image_size)) 
+            {
+                return collage;
+            }
+        }
+
+        img_i += (int)(height_factor * channels * (width * (1 - width_factor)));
+    }
+    
+    return collage;
+}
+
+int match_image_by_luminance(
+    float Y, float* images_luminance, int count,
+    int not_allowed_1, int not_allowed_2)
+{
+    int best_image = 0;
+    float best_distance = 1;
+    for (int k=0; k<count; k++)
+    {
+        if (images_luminance[k] == 0 || 
+            k == not_allowed_1 || 
+            k == not_allowed_2)
+                continue;
+
+        float d = fabs(Y - images_luminance[k]);
+
+        if (d < best_distance)
+        {       
+            best_distance = d;
+            best_image = k;
+        }
+    }
+    return best_image;
+}
+
+int match_image_by_structure(
+    struct image_structure_t S, struct image_structure_t* images_structure, int count,
+    int not_allowed_1, int not_allowed_2)
+{
+    int best_image = 0;
+    float best_distance = 1;
+    for (int k=0; k<count; k++)
+    {
+        if (is_null_structure(images_structure[k]) || 
+            k == not_allowed_1 || 
+            k == not_allowed_2)
+                continue;
+
+        float d = get_structure_difference(S, images_structure[k]);
+        
+        if (d < best_distance)
+        {       
+            best_distance = d;
+            best_image = k;
+        }
+    }
+    return best_image;
+}
+
+int match_any_image_above(
+    float Y, float* images_luminance, int count,
+    int not_allowed_1, int not_allowed_2)
+{
+    for (int k=0; k<count; k++)
+    {
+        int r = (int) (random() * ((double) count / RAND_MAX));
+        if (images_luminance[r] >= Y &&
+            r != not_allowed_1 && r != not_allowed_2)
+            return r;
+    }
     return 0;
+}
+
+uint8_t* collage_from_multiple_images(
+    uint8_t *creator_image, int creator_width, int creator_height, int channels,
+    uint8_t **image_array, int image_width, int image_height, int image_count,
+    float *images_luminance, struct image_structure_t* images_structure) 
+{
+    int creator_size = creator_width * creator_height * channels;
+    int collage_width = creator_width * image_width;
+    int collage_height = creator_height * image_height;
+
+    size_t collage_size = collage_width * collage_height * channels;
+    print_malloc(collage_size, false);
+    uint8_t* collage = malloc(collage_size);
+
+    uint8_t* img_i = creator_image;
+
+    int image_selection[creator_width][creator_height];
+    for (int i=0; i<creator_height; i++) 
+    {
+        for (int j=0; j<creator_width; j++) 
+        {
+            // get matching image
+            // struct image_structure_t S = { 
+            //     get_point_luminance(*(img_i), *(img_i+1), *(img_i+2)),
+            //     get_point_luminance(*(img_i+3), *(img_i+4), *(img_i+5)),
+            //     get_point_luminance(*(img_i+creator_width), *(img_i+creator_width+1), *(img_i+creator_width+2)),
+            //     get_point_luminance(*(img_i+creator_width+3), *(img_i+creator_width+4), *(img_i+creator_width+5)),
+            // };
+
+            float Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+
+            int selection_above = -1, selection_left = -1;
+            int best_image;
+            if (j > 0) selection_above = image_selection[i][j-1];
+            if (i > 0) selection_left = image_selection[i-1][j];
+
+            if (MODE_CONTOUR && Y >= 0.9f)
+            {
+                best_image = match_any_image_above(
+                    0.2f, images_luminance, image_count,
+                    selection_above, selection_left
+                );
+            }
+            else
+            {
+                best_image = match_image_by_luminance(
+                    Y, images_luminance, image_count, 
+                    selection_above, selection_left
+                );
+            }
+
+            uint8_t* selected_image = image_array[best_image];
+            image_selection[i][j] = best_image;
+
+            bool paste_success = paste_image_at_pos( 
+                collage, collage_width, collage_height, channels,
+                selected_image, image_width, image_height, channels, 
+                j*image_width, i*image_height, 1
+            );
+
+            img_i += channels;
+
+            if (!paste_success || (img_i >= creator_image + creator_size)) 
+            {
+                return collage;
+            }
+        }
+    }
+    
+    return collage;
+}
+
+uint8_t* add_border(
+    uint8_t* image, int width, int height, int channels,
+    int border_top, int border_bottom, int border_left, int border_right,
+    int border_red, int border_green, int border_blue)
+{
+    int new_width = width + border_left + border_right,
+        new_height = height + border_top + border_bottom;
+    print_malloc(new_width * new_height * channels, false);
+    uint8_t* image_with_border = malloc(new_width * new_height * channels);
+
+    uint8_t *img_i = image, *img_border_i = image_with_border;
+    int image_size = width * height * channels;
+    int p=0;
+
+    // top border
+    img_border_i = put_pixels(
+        img_border_i, border_top * new_width, 
+        border_red, border_green, border_blue
+    );
+
+    while (img_i < image + image_size)
+    {
+        // left border
+        if (p % width == 0)
+        {
+            img_border_i = put_pixels(
+                img_border_i, border_left, 
+                border_red, border_green, border_blue
+            );
+        }
+    
+        // copy pixel
+        *img_border_i = (uint8_t) *img_i;
+        *(img_border_i+1) = (uint8_t) *(img_i+1);
+        *(img_border_i+2) = (uint8_t) *(img_i+2);
+
+        // right border
+        if (p % width == width-1)
+        {
+            img_border_i = put_pixels(
+                img_border_i, border_right, 
+                border_red, border_green, border_blue
+            );
+        }
+
+        img_border_i += channels;
+        img_i += channels;
+        p++;
+    }
+
+    // bottom border
+    img_border_i = put_pixels(
+        img_border_i, border_bottom * new_width, 
+        border_red, border_green, border_blue
+    );
+
+    return image_with_border;
+}
+
+uint8_t* get_contour_image(uint8_t* image, int width, int height, int channels)
+{
+    // TODO
+    return NULL;
 }

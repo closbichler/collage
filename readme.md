@@ -1,7 +1,8 @@
 # Collage
 
 ## TODO 
- - Fotos kleiner skalieren mit gscheitem Algorithmus
+ - Konturen: https://www.sciencedirect.com/science/article/abs/pii/0734189X85900167
+ - CLI verbessern
 
 ## Calculations
 
