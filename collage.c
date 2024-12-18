@@ -137,8 +137,8 @@ struct image_structure_t get_image_structure(uint8_t* image, int width, int heig
 
 float get_structure_difference(struct image_structure_t s1, struct image_structure_t s2)
 {
-    return (abs(s1.y1 - s2.y1) + abs(s1.y2 - s2.y2) + 
-            abs(s1.y3 - s2.y3) + abs(s1.y4 - s2.y4))/4;
+    return (fabs(s1.y1 - s2.y1) + fabs(s1.y2 - s2.y2) + 
+            fabs(s1.y3 - s2.y3) + fabs(s1.y4 - s2.y4));
 }
 
 struct image_structure_t get_null_structure()
@@ -410,17 +410,26 @@ int match_image_by_luminance(
     return best_image;
 }
 
+bool int_array_contains(int* array, int size, int item)
+{
+    for (int i=0; i<size; i++)
+    {
+        if (array[i] == item)
+            return true;
+    }
+    return false;
+}
+
 int match_image_by_structure(
     struct image_structure_t S, struct image_structure_t* images_structure, int count,
-    int not_allowed_1, int not_allowed_2)
+    int* not_allowed, int not_allowed_count)
 {
     int best_image = 0;
-    float best_distance = 1;
+    float best_distance = 1000;
     for (int k=0; k<count; k++)
     {
         if (is_null_structure(images_structure[k]) || 
-            k == not_allowed_1 || 
-            k == not_allowed_2)
+            int_array_contains(not_allowed, not_allowed_count, k))
                 continue;
 
         float d = get_structure_difference(S, images_structure[k]);
@@ -434,67 +443,85 @@ int match_image_by_structure(
     return best_image;
 }
 
-int match_any_image_above(
-    float Y, float* images_luminance, int count,
-    int not_allowed_1, int not_allowed_2)
+int match_any_image_above(float Y, float* images_luminance, int count,
+                          int* not_allowed, int not_allowed_size)
 {
     for (int k=0; k<count; k++)
     {
         int r = (int) (random() * ((double) count / RAND_MAX));
-        if (images_luminance[r] >= Y &&
-            r != not_allowed_1 && r != not_allowed_2)
+        if (images_luminance[r] >= Y && !int_array_contains(not_allowed, not_allowed_size, k))
             return r;
     }
     return 0;
 }
 
 uint8_t* collage_from_multiple_images(
-    uint8_t *creator_image, int creator_width, int creator_height, int channels,
+    uint8_t *creator_image, int creator_width, int creator_height, int channels, 
     uint8_t **image_array, int image_width, int image_height, int image_count,
-    float *images_luminance, struct image_structure_t* images_structure) 
+    float *images_luminance, struct image_structure_t* images_structure,
+    bool mode_contour) 
 {
+    if (channels != 3) printf("ERR: unable with %d channels\n", channels);
+
     int creator_size = creator_width * creator_height * channels;
-    int collage_width = creator_width * image_width;
-    int collage_height = creator_height * image_height;
+    int fotos_horiz = creator_width/2,
+        fotos_vert = creator_height/2;
+    int collage_width = fotos_horiz * image_width,
+        collage_height = fotos_vert * image_height;
 
     size_t collage_size = collage_width * collage_height * channels;
     print_malloc(collage_size, false);
     uint8_t* collage = malloc(collage_size);
 
-    uint8_t* img_i = creator_image;
+    struct image_structure_t white_structure = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-    int image_selection[creator_width][creator_height];
-    for (int i=0; i<creator_height; i++) 
+    int image_selection[fotos_vert][fotos_horiz];
+    for (int i=0; i<fotos_vert; i++) 
     {
-        for (int j=0; j<creator_width; j++) 
+        for (int j=0; j<fotos_horiz; j++) 
         {
-            // get matching image
-            // struct image_structure_t S = { 
-            //     get_point_luminance(*(img_i), *(img_i+1), *(img_i+2)),
-            //     get_point_luminance(*(img_i+3), *(img_i+4), *(img_i+5)),
-            //     get_point_luminance(*(img_i+creator_width), *(img_i+creator_width+1), *(img_i+creator_width+2)),
-            //     get_point_luminance(*(img_i+creator_width+3), *(img_i+creator_width+4), *(img_i+creator_width+5)),
-            // };
+            uint8_t* cur_pix = creator_image + (creator_width * i*2 + j*2) * channels;
+            uint8_t* right_pix = creator_image + (creator_width * i*2 + (j*2+1)) * channels;
+            uint8_t* down_pix = creator_image + (creator_width * (i*2+1) + j) * channels;
+            uint8_t* down_right_pix = creator_image + (creator_width * (i*2+1) + (j*2+1)) * channels;
 
-            float Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2));
+            if (down_right_pix >= creator_image + creator_size)
+                return collage;
 
-            int selection_above = -1, selection_left = -1;
+            struct image_structure_t S = { 
+                get_point_luminance(*(cur_pix), *(cur_pix+1), *(cur_pix+2)),
+                get_point_luminance(*(right_pix), *(right_pix+1), *(right_pix+2)),
+                get_point_luminance(*(down_pix), *(down_pix+1), *(down_pix+2)),
+                get_point_luminance(*(down_right_pix), *(down_right_pix+1), *(down_right_pix+2)),
+            };
+
+
+            int not_allowed_radius = 3,
+                not_allowed[not_allowed_radius * not_allowed_radius],
+                not_allowed_count = 0;
+
+            for (int k=i-not_allowed_radius; k<=i; k++)
+            {
+                for (int l=j-not_allowed_radius; l<=j+not_allowed_radius; l++)
+                {
+                    if (k >= 0 && l >= 0 && !(k == i && l >= j)) 
+                        not_allowed[not_allowed_count++] = image_selection[k][l];
+                }
+            }
+
             int best_image;
-            if (j > 0) selection_above = image_selection[i][j-1];
-            if (i > 0) selection_left = image_selection[i-1][j];
-
-            if (MODE_CONTOUR && Y >= 0.9f)
+            if (mode_contour && get_structure_difference(S, white_structure) < 0.8f)
             {
                 best_image = match_any_image_above(
                     0.2f, images_luminance, image_count,
-                    selection_above, selection_left
+                    not_allowed, not_allowed_count
                 );
             }
             else
             {
-                best_image = match_image_by_luminance(
-                    Y, images_luminance, image_count, 
-                    selection_above, selection_left
+                best_image = match_image_by_structure(
+                    S, images_structure, image_count, 
+                    not_allowed, not_allowed_count
                 );
             }
 
@@ -507,9 +534,7 @@ uint8_t* collage_from_multiple_images(
                 j*image_width, i*image_height, 1
             );
 
-            img_i += channels;
-
-            if (!paste_success || (img_i >= creator_image + creator_size)) 
+            if (!paste_success) 
             {
                 return collage;
             }

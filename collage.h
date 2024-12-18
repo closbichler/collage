@@ -6,11 +6,6 @@
 #include <stddef.h>
 
 
-/* Configuration */
-
-static const bool MODE_CONTOUR = true;
-
-
 /* Constants */
 
 static const int A4_HEIGHT_300PPI = 2480;
@@ -61,9 +56,9 @@ bool is_null_structure(struct image_structure_t s);
 int match_image_by_luminance(float Y, float* images_luminance, int count,
                              int not_allowed_1, int not_allowed_2);
 int match_image_by_structure(struct image_structure_t S, struct image_structure_t* images_structure, int count,
-                             int not_allowed_1, int not_allowed_2);
+                             int* not_allowed, int not_allowed_size);
 int match_any_image_above(float Y, float* images_luminance, int count,
-                          int not_allowed_1, int not_allowed_2);
+                          int* not_allowed, int not_allowed_size);
 
 
 /* Whole image manipulation */
@@ -81,7 +76,7 @@ uint8_t* collage_from_single_image(uint8_t *image, int width, int height, int ch
 uint8_t* collage_from_multiple_images(
     uint8_t *creator_image, int creator_width, int creator_height, int channels,
     uint8_t **image_array, int image_width, int image_height, int image_count,
-    float *images_luminance, struct image_structure_t* images_structure);
+    float *images_luminance, struct image_structure_t* images_structure, bool mode_contour);
 
 uint8_t* add_border(
     uint8_t* image, int width, int height, int channels,

@@ -31,7 +31,7 @@ void print_usage()
     printf("\tshrink input-image output-path\tShrink image\n");
     printf("\tsingle input-image output-path mode\tCreate collage from single repeated image\n");
     printf("\t\tmode\t0 = based on input-image, 1 = circle\n");
-    printf("\tmulti input-image folder-of-images output-path collage-size jpg-quality\tCreate collage from bunch of images\n");
+    printf("\tmulti input-image folder-of-images output-path collage-size jpg-quality [false (mode_contour)]\tCreate collage from bunch of images\n");
     printf("\t\tcollage-size\t\"A1\", \"A2\", \"A3\", \"A4\" or \"widthxheight\"\n");
     printf("\t\tjpg-quality\tNumber between 0 and 100\n");
     printf("Options:\n\t-h --help\tPrint help/usage\n");
@@ -160,7 +160,7 @@ void single_collage(char* input_image, char* output_image, int mode)
 void multi_collage(
     char* input_image_path, char* output_image_path, char* image_folder,
     char* collage_size_identifier, int border_size_guidance, int foto_size,
-    int jpg_quality, bool debug_and_write)
+    int jpg_quality, bool mode_contour)
 {
     int collage_width, collage_height;
 
@@ -234,10 +234,10 @@ void multi_collage(
     /*  Load creator image and shrink  */
     if (VERBOSE_OUTPUT) printf("Load main image\n");
 
-    int creator_width, creator_height, creator_bpp;
-    uint8_t* creator_image = stbi_load(input_image_path, &creator_width, &creator_height, &creator_bpp, 3);
+    int creator_width_original, creator_height_original, creator_bpp;
+    uint8_t* creator_image = stbi_load(input_image_path, &creator_width_original, &creator_height_original, &creator_bpp, 3);
 
-    if (VERBOSE_OUTPUT) printf("Main image loaded with %dx%dx%d\n", creator_width, creator_height, creator_bpp);
+    if (VERBOSE_OUTPUT) printf("Main image loaded with %dx%dx%d\n", creator_width_original, creator_height_original, creator_bpp);
 
     if (creator_image == NULL)
     {
@@ -245,13 +245,15 @@ void multi_collage(
         return;
     }
     
+    int creator_width = fotos_horiz * 2,
+        creator_height = fotos_vert * 2;
     uint8_t* creator_shrunk = shrink_image_size(
-        creator_image, creator_width, creator_height, creator_bpp,
-        fotos_horiz, fotos_vert
+        creator_image, creator_width_original, creator_height_original, creator_bpp,
+        creator_width, creator_height
     );
 
     if (VERBOSE_OUTPUT) printf("Main image %s with dim %dx%d px\n", input_image_path, creator_width, creator_height);
-    if (debug_and_write) stbi_write_jpg("main-image.jpg", fotos_horiz, fotos_vert, 3, creator_shrunk, jpg_quality);
+    if (DEBUG_OUTPUT) stbi_write_jpg("main-image.jpg", creator_width, creator_height, 3, creator_shrunk, jpg_quality);
     stbi_image_free(creator_image);
 
 
@@ -300,12 +302,12 @@ void multi_collage(
         float Y = get_average_luminance(image_cut, foto_width, foto_height, bpp); 
         all_images[i] = image_cut;
         images_luminance[i] = Y;
-        struct image_structure_t s_image = get_image_structure(
+        struct image_structure_t S = get_image_structure(
             image_cut, foto_width, foto_height, bpp
         );
-        images_structure[i] = s_image;
+        images_structure[i] = S;
 
-        if (VERBOSE_OUTPUT) printf("%d brightness %f of image %s\n", i, Y, filenames[i]);
+        if (VERBOSE_OUTPUT) printf("%d image %s with brightness %.2f and struct (%.2f,%.2f,%.2f,%.2f)\n", i, filenames[i], Y, S.y1, S.y2, S.y3, S.y4);
         stbi_image_free(image);
         suitable_foto_count++;
     }
@@ -323,9 +325,9 @@ void multi_collage(
     /*  Create collage  */
 
     uint8_t* collage_inner = collage_from_multiple_images(
-        creator_shrunk, fotos_horiz, fotos_vert, 3,
+        creator_shrunk, creator_width, creator_height, 3,
         all_images, foto_width, foto_height, foto_count,
-        images_luminance, images_structure
+        images_luminance, images_structure, mode_contour
     );
     stbi_image_free(creator_shrunk);
     for (int i=0; i<foto_count; i++) stbi_image_free(all_images[i]);
@@ -339,7 +341,7 @@ void multi_collage(
     {
         /*  Add border  */
 
-        if (debug_and_write) stbi_write_jpg(output_image_path, collage_inner_width, collage_inner_height, 3, collage_inner, jpg_quality);
+        if (DEBUG_OUTPUT) stbi_write_jpg(output_image_path, collage_inner_width, collage_inner_height, 3, collage_inner, jpg_quality);
         if (VERBOSE_OUTPUT) printf("add border: %d %d %d %d px\n", border_top, border_right, border_bottom, border_left);
         
         uint8_t* collage_with_border = add_border(
@@ -403,10 +405,14 @@ int main(int argc, char* argv[])
         strcpy(jpg_quality_str, argv[6 + no_options]);
         jpg_quality = atoi(jpg_quality_str);
 
+        bool mode_contour = true;
+        if (argc > 7 + no_options && strcmp(argv[7 + no_options], "false") == 0)
+            mode_contour = false;
+
         multi_collage(
             input_image, output_image, image_folder,
             collage_size_id, 0, 118,
-            jpg_quality, false
+            jpg_quality, mode_contour
         );
     }
     else if (strcmp(action, "shrink") == 0)
