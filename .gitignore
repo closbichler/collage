@@ -1,3 +1,7 @@
 collage
-fotos/
-*.jpg
+photos/*
+/*.jpg
+
+!photos/nehammer.jpg
+!photos/nehammer-collage-single.jpg
+!photos/nehammer-collage-multi.jpg

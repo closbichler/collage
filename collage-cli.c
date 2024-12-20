@@ -27,16 +27,23 @@ static const int FILENAME_LENGTH = 100;
 
 void print_usage()
 {
-    printf("Usage: collage [options] ..\n");
-    printf("\tshrink input-image output-path\tShrink image\n");
-    printf("\tsingle input-image output-path mode\tCreate collage from single repeated image\n");
-    printf("\t\tmode\t0 = based on input-image, 1 = circle\n");
-    printf("\tmulti input-image folder-of-images output-path collage-size jpg-quality [false (mode_contour)]\tCreate collage from bunch of images\n");
-    printf("\t\tcollage-size\t\"A1\", \"A2\", \"A3\", \"A4\" or \"widthxheight\"\n");
-    printf("\t\tjpg-quality\tNumber between 0 and 100\n");
-    printf("Options:\n\t-h --help\tPrint help/usage\n");
-    printf("\t-v --verbose\tEnable verbose output\n");
-    printf("\t-d --debug\tFor multi: writes a jpg-image for every stage of process\n");
+    printf("Usage:\n");
+    printf("\tcollage [..] shrink INPUT_IMAGE OUTPUT_PATH\n");
+    printf("\tcollage [..] single INPUT_IMAGE OUTPUT_PATH MODE\n");
+    printf("\tcollage [..] multi INPUT_IMAGE IMAGE_FOLDER OUTPUT_PATH COLLAGE_SIZE JPG_QUALITY\n");
+
+    printf("\narguments:\n");
+    printf("\tINPUT_IMAGE\tpath to image\n");
+    printf("\tOUTPUT_PATH\tath of output-image to write\n");
+    printf("\tINPUT_FOLDER\tpath of folder, which images are included in the collage\n");
+    printf("\tMODE\t0 = based on INPUT_IMAGE, 1 = circle\n");
+    printf("\tCOLLAGE_SIZE\t\"widthxheight\" or \"A1\", \"A2\", \"A3\", \"A4\"\n");
+    printf("\tJPG_QUALITY\tinteger between 0 and 100\n");
+
+    printf("\noptions:\n");
+    printf("\t-h --help\tshow help/usage\n");
+    printf("\t-v --verbose\tenable verbose logs\n");
+    printf("\t-d --debug\t(for multi) write images for every stage in process\n");
 }
 
 char** get_all_filenames(char* folder, int* file_count)
