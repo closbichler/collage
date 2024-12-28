@@ -13,15 +13,11 @@
 
 /* Configuration */
 
-static const int SHRINK_FACTOR = 10;    // for fun and single
 static const int FOTO_LIMIT = 600;      // for multi
+static const int FILENAME_LENGTH = 100;
+static const int DEFAULT_JPG_QUALITY = 70;
 static bool VERBOSE_OUTPUT = false;     // can be set with -v
 static bool DEBUG_OUTPUT = false;       // can be set with -d
-
-/* Constants */
-
-static const int FILENAME_LENGTH = 100;
-
 
 /* Miscellaneous methods */
 
@@ -81,7 +77,6 @@ char** get_all_filenames(char* folder, int* file_count)
     return filenames;
 }
 
-
 /* Implementation */
 
 void shrink_collage(char* input_image, char* output_image)
@@ -122,7 +117,7 @@ void shrink_collage(char* input_image, char* output_image)
     else 
     {
         if (VERBOSE_OUTPUT) printf("Shrunk to size %dx%d\n", shrink_width, shrink_height);
-        stbi_write_jpg(output_image, shrink_width, shrink_height, 3, shrunk_image, 90);
+        stbi_write_jpg(output_image, shrink_width, shrink_height, 3, shrunk_image, DEFAULT_JPG_QUALITY);
     }
 
     stbi_image_free(image);
@@ -131,7 +126,8 @@ void shrink_collage(char* input_image, char* output_image)
 
 void single_collage(char* input_image, char* output_image, int mode)
 {
-    int shrink_factor = SHRINK_FACTOR;
+    float shrink_factor = 10;
+
     int width, height, bpp;
     uint8_t* image = stbi_load(input_image, &width, &height, &bpp, 3);
 
@@ -141,24 +137,31 @@ void single_collage(char* input_image, char* output_image, int mode)
         return;
     }
     
-    if (VERBOSE_OUTPUT) printf("image: width=%d, height=%d, channels=%d\n", width, height, bpp);
+    if (VERBOSE_OUTPUT) print_image_dimensions("image", width, height, bpp);
 
     int shrunk_width, shrunk_height;
     uint8_t* shrunk_image = shrink_image_factor(
         image, width, height, &shrunk_width, &shrunk_height, shrink_factor
     );
+    int squared_size = fmin(shrunk_width, shrunk_height);
+    uint8_t* squared_image = shrink_image_size(
+        image, width, height, bpp, squared_size, squared_size
+    );
 
     stbi_image_free(image);
 
-    if (VERBOSE_OUTPUT) printf("shrunk image: width=%d, height=%d\n", shrunk_width, shrunk_height);
+    if (VERBOSE_OUTPUT) print_image_dimensions("shrunk image", shrunk_width, shrunk_height, bpp);
 
-    int collage_width, collage_height;
+    int collage_width, collage_height, collage_channels;
     uint8_t* collage = collage_from_single_image(
-        shrunk_image, shrunk_width, shrunk_height, 3,
-        &collage_width, &collage_height, mode
+        shrunk_image, shrunk_width, shrunk_height, bpp,
+        squared_image, squared_size, squared_size, bpp,
+        &collage_width, &collage_height, &collage_channels, mode
     );
+
+    if (VERBOSE_OUTPUT) print_image_dimensions("collage single", collage_width, collage_height, collage_channels);
     
-    stbi_write_jpg(output_image, collage_width, collage_height, 3, collage, 60);
+    stbi_write_jpg(output_image, collage_width, collage_height, collage_channels, collage, DEFAULT_JPG_QUALITY);
 
     stbi_image_free(shrunk_image);
     stbi_image_free(collage);
@@ -237,20 +240,19 @@ void multi_collage(
             border_top, border_right, border_bottom, border_left);
     }
 
-
     /*  Load creator image and shrink  */
     if (VERBOSE_OUTPUT) printf("Load main image\n");
 
     int creator_width_original, creator_height_original, creator_bpp;
     uint8_t* creator_image = stbi_load(input_image_path, &creator_width_original, &creator_height_original, &creator_bpp, 3);
 
-    if (VERBOSE_OUTPUT) printf("Main image loaded with %dx%dx%d\n", creator_width_original, creator_height_original, creator_bpp);
-
     if (creator_image == NULL)
     {
         fprintf(stderr, "ERR: input_image wrong\n");
         return;
     }
+
+    if (VERBOSE_OUTPUT) print_image_dimensions("Main image loaded", creator_width_original, creator_height_original, creator_bpp);
     
     int creator_width = fotos_horiz * 2,
         creator_height = fotos_vert * 2;
@@ -259,10 +261,9 @@ void multi_collage(
         creator_width, creator_height
     );
 
-    if (VERBOSE_OUTPUT) printf("Main image %s with dim %dx%d px\n", input_image_path, creator_width, creator_height);
+    if (VERBOSE_OUTPUT) print_image_dimensions("Main image shrunk", creator_width, creator_height, creator_bpp);
     if (DEBUG_OUTPUT) stbi_write_jpg("main-image.jpg", creator_width, creator_height, 3, creator_shrunk, jpg_quality);
     stbi_image_free(creator_image);
-
 
     /*  Load fotos  */
 
@@ -416,9 +417,12 @@ int main(int argc, char* argv[])
         if (argc > 7 + no_options && strcmp(argv[7 + no_options], "false") == 0)
             mode_contour = false;
 
+        // TODO: calculate size according to collage dimensions
+        int foto_size = 118; // default = 118 (good for print 300dpi)
+
         multi_collage(
             input_image, output_image, image_folder,
-            collage_size_id, 0, 118,
+            collage_size_id, 0, foto_size,
             jpg_quality, mode_contour
         );
     }

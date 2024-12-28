@@ -22,22 +22,29 @@ static const float LUMINANCE_GREEN = 0.7152f;
 static const float LUMINANCE_BLUE = 0.0722f;
 static const float LUMINANCE_POWER_CURVE = 2.2f;
 
+static const int MAX_DIMENSION = 10000;
+static const int MAX_CHANNELS = 3;
 
 /* Global variables */
 
 extern unsigned long TOTAL_MALLOC;
 
-
 /* Typedefs */
 
+typedef struct 
+{
+    uint8_t* image;
+    int width, height, channels;
+} image_t;
 struct image_structure_t { float y1, y2, y3, y4; };
-
 
 /* Helper methods */
 
 void set_debug(bool debug);
 void print_malloc(size_t size, bool print_always);
-
+void print_malloc_error(size_t size);
+bool check_image_dimensions(image_t image);
+void print_image_dimensions(char* name, int width, int height, int channels);
 
 /* Baisc pixel manipulation */
 
@@ -60,7 +67,6 @@ int match_image_by_structure(struct image_structure_t S, struct image_structure_
 int match_any_image_above(float Y, float* images_luminance, int count,
                           int* not_allowed, int not_allowed_size);
 
-
 /* Whole image manipulation */
 
 uint8_t* shrink_image_factor(uint8_t* image, int width, int height, int* shrunk_width, int* shrunk_height, int factor);
@@ -71,8 +77,11 @@ bool paste_image_at_pos(uint8_t *image_to, int width1, int height1, int channels
                         uint8_t *image_from, int width2, int height2, int channels2, 
                         int x, int y, float tone);
 
-uint8_t* collage_from_single_image(uint8_t *image, int width, int height, int channels,
-                                   int *collage_width, int *collage_height, int mode);
+uint8_t* collage_from_single_image(
+    uint8_t *base_image, int base_width, int base_height, int base_channels,
+    uint8_t *paste_image, int paste_width, int paste_height, int paste_channels,
+    int *collage_width, int *collage_height, int *collage_channels,
+    int mode);
 uint8_t* collage_from_multiple_images(
     uint8_t *creator_image, int creator_width, int creator_height, int channels,
     uint8_t **image_array, int image_width, int image_height, int image_count,

@@ -35,9 +35,25 @@ void print_malloc(size_t size, bool print_always)
     }
 }
 
+void print_malloc_error(size_t size)
+{
+    fprintf(stderr, "ERR: malloc failed with size %lu\n", size);
+}
+
 void set_debug(bool debug)
 {
     DEBUG = debug;
+}
+
+bool check_image_dimensions(image_t image) 
+{
+    return (image.width > 0 && image.height > 0 && image.channels > 0 &&
+        image.width <= MAX_DIMENSION && image.height <= MAX_DIMENSION && image.channels <= MAX_CHANNELS);
+}
+
+void print_image_dimensions(char* name, int width, int height, int channels)
+{
+    printf("%s: %dx%dx%d\n", name, width, height, channels);
 }
 
 float get_point_luminance(uint8_t r, uint8_t g, uint8_t b)
@@ -290,7 +306,7 @@ bool paste_image_at_pos(
     }
     else if ((x + width2 > width1) || (y + height2 > height1))
     {
-        if (DEBUG) fprintf(stderr, "ERR: Paste coordinates out of bounds\n");
+        if (DEBUG) fprintf(stderr, "ERR: Paste coordinates out of bounds %d,%d\n", x, y);
         return false;
     }
 
@@ -325,62 +341,58 @@ bool paste_image_at_pos(
 }
 
 uint8_t* collage_from_single_image(
-    uint8_t *image, int width, int height, int channels,
-    int *collage_width, int *collage_height, int mode) 
+    uint8_t *base_image, int base_width, int base_height, int base_channels,
+    uint8_t *paste_image, int paste_width, int paste_height, int paste_channels,
+    int *collage_width, int *collage_height, int *collage_channels, 
+    int mode) 
 {
-    int image_size = width * height * channels;
-    *collage_width = width * width;
-    *collage_height = height * height;
+    image_t base_image_s, paste_image_s;
+    base_image_s.width = base_width;
+    base_image_s.height = base_height;
+    base_image_s.channels = base_channels;
+    paste_image_s.width = paste_width;
+    paste_image_s.height = paste_height;
+    paste_image_s.channels = paste_channels;
+    if (!check_image_dimensions(base_image_s) ||
+        !check_image_dimensions(paste_image_s) ||
+        !(mode == 0 || mode == 1))
+    {
+        fprintf(stderr, "ERR: invalid input image dimensions or wrong function call\n");
+        return NULL;
+    }
 
-    float aspect_ratio = (float)width / (float) height;
-    float width_factor = 1, height_factor = 1;
-
-    if (aspect_ratio >= 1) 
-        width_factor = 1/aspect_ratio;
-    else
-        height_factor = aspect_ratio;
-
-    if (DEBUG) printf("ratio: %f, width_factor=%f, height_factor=%f\n", aspect_ratio, width_factor, height_factor);
-
-    *collage_width = (int) ((*collage_width) * width_factor);
-    *collage_height = (int) ((*collage_height) * height_factor);
-
-    if (DEBUG) printf("collage: width=%d, height=%d\n", *collage_width, *collage_height);
+    *collage_width = (base_width * paste_width);
+    *collage_height = (base_height * paste_height);
+    *collage_channels = paste_channels;
     
-    size_t collage_size = (*collage_width) * (*collage_height) * channels;
+    size_t collage_size = (*collage_width) * (*collage_height) * (*collage_channels);
     print_malloc(collage_size, false);
     uint8_t* collage = malloc(collage_size);
-
-    uint8_t* img_i = image;
-    img_i += (int) (channels * (width * (1 - width_factor) + height * (1 - height_factor) * width) / 2);
-
-    for (int i=0; i<height*height_factor; i++) 
+    if (collage == NULL)
     {
-        for (int j=0; j<width*width_factor; j++) 
+        print_malloc_error(collage_size);
+        return NULL;
+    }
+
+    for (int x=0; x<base_width; x++) 
+    {
+        for (int y=0; y<base_height; y++)
         {
+            uint8_t* base_pixel = base_image + (y * base_width + x) * base_channels;
             float Y;
             switch (mode)
             {
                 default: 
-                case 0: Y = get_point_luminance(*img_i, *(img_i+1), *(img_i+2)); break;
-                case 1: Y = fabs(sin(i*M_PI / height) * sin(j*M_PI / height)); break;
+                case 0: Y = get_point_luminance(*base_pixel, *(base_pixel+1), *(base_pixel+2)); break;
+                case 1: Y = fabs(sinf(x*M_PI / base_width) * sinf(y*M_PI / base_height)); break;
             }
 
-            bool paste_success = paste_image_at_pos( 
-                collage, *collage_width, *collage_height, channels,
-                image, width, height, channels, 
-                j*width, i*height, Y
+            paste_image_at_pos( 
+                collage, *collage_width, *collage_height, *collage_channels,
+                paste_image, paste_width, paste_height, paste_channels, 
+                x*paste_width, y*paste_height, Y
             );
-
-            img_i += channels;
-
-            if (!paste_success || (img_i >= image + image_size)) 
-            {
-                return collage;
-            }
         }
-
-        img_i += (int)(height_factor * channels * (width * (1 - width_factor)));
     }
     
     return collage;
@@ -495,8 +507,8 @@ uint8_t* collage_from_multiple_images(
                 get_point_luminance(*(down_right_pix), *(down_right_pix+1), *(down_right_pix+2)),
             };
 
-
-            int not_allowed_radius = 3,
+            // TODO: calculate radius according to amount of photos
+            int not_allowed_radius = 2,
                 not_allowed[not_allowed_radius * not_allowed_radius],
                 not_allowed_count = 0;
 
