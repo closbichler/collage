@@ -2,13 +2,13 @@
 Tool to create a collage from a single or mutliple images using stb_image library. For quality results of `multi` collages use more than 100-200 photos.
 
 ## Limitations
- - Works only with rgb-images of 3 channels
+ - Works currently only with rgb-images of 3 channels
  - Only writes jpegs
 
 ## Examples
 ||||
 |-|-|-|
-|![Base image](photos/nehammer.jpg "Karl Nehammer")Base Image|![single collage](photos/nehammer-collage-single.jpg "Karl Nehammer")*single* collage|![multi collage](photos/nehammer-collage-multi.jpg "Karl Nehammer")*multi* collage|
+|![base image](photos/nehammer.jpg "Karl Nehammer")base image|![single collage](photos/nehammer-collage-single.jpg "Karl Nehammer")*single* collage|![multi collage](photos/nehammer-collage-multi.jpg "Karl Nehammer")*multi* collage|
 
 ## Usage
 |Method|Notes|
