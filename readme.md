@@ -3,6 +3,7 @@ Tool to create a collage from a single or mutliple images using stb_image librar
 
 ## Limitations
  - Works only with rgb-images of 3 channels
+ - Only writes jpegs
 
 ## Examples
 ||||
@@ -39,6 +40,8 @@ options:
 ```
 
 ## TODO 
- - Calculate Contours (see https://www.sciencedirect.com/science/article/abs/pii/0734189X85900167)
+ - Implement contours (see https://www.sciencedirect.com/science/article/abs/pii/0734189X85900167)
+ - Fix broken add_border
  - Exception handling: check malloc for NULL, input validation, etc.
  - Support more than 3 channels
+ - refactor collage_from_multiple_images

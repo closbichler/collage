@@ -10,14 +10,13 @@
 
 #include "collage.h"
 
-
 /* Configuration */
 
-static const int FOTO_LIMIT = 600;      // for multi
+static const int FOTO_LIMIT = 600; // for multi
 static const int FILENAME_LENGTH = 100;
 static const int DEFAULT_JPG_QUALITY = 70;
-static bool VERBOSE_OUTPUT = false;     // can be set with -v
-static bool DEBUG_OUTPUT = false;       // can be set with -d
+static bool VERBOSE_OUTPUT = false; // can be set with -v
+static bool DEBUG_OUTPUT = false;   // can be set with -d
 
 /* Miscellaneous methods */
 
@@ -42,7 +41,7 @@ void print_usage()
     printf("\t-d --debug\t(for multi) write images for every stage in process\n");
 }
 
-char** get_all_filenames(char* folder, int* file_count)
+char **get_all_filenames(char *folder, int *file_count)
 {
     DIR *dir;
     struct dirent *ent;
@@ -54,14 +53,14 @@ char** get_all_filenames(char* folder, int* file_count)
     }
 
     *file_count = -2;
-    while ((ent = readdir(dir)) != NULL) 
-        (*file_count)++;   
+    while ((ent = readdir(dir)) != NULL)
+        (*file_count)++;
     rewinddir(dir);
 
-    print_malloc(*file_count * sizeof(char*), false);
-    char** filenames = malloc(*file_count * sizeof(char*));
+    print_malloc(*file_count * sizeof(char *), false);
+    char **filenames = malloc(*file_count * sizeof(char *));
 
-    int i=0;
+    int i = 0;
     while ((ent = readdir(dir)) != NULL)
     {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
@@ -79,97 +78,94 @@ char** get_all_filenames(char* folder, int* file_count)
 
 /* Implementation */
 
-void shrink_collage(char* input_image, char* output_image)
+void shrink_collage(char *input_image, char *output_image)
 {
     int shrink_width = 200, shrink_height = 200;
     int shrink_algorithm = 1;
 
-    int width, height, bpp;
-    uint8_t* image = stbi_load(input_image, &width, &height, &bpp, 3);
+    image_t image;
+    image.pix = stbi_load(input_image, &image.w, &image.h, &image.ch, 3);
 
-    if (image == NULL)
+    if (image.pix == NULL)
     {
         printf("input_image wrong\n");
         return;
     }
-    
-    if (VERBOSE_OUTPUT) printf("Shrink with algorithm %d\n", shrink_algorithm);
 
-    uint8_t* shrunk_image;
+    if (VERBOSE_OUTPUT)
+        printf("Shrink with algorithm %d\n", shrink_algorithm);
+
+    image_t shrunk_image;
     switch (shrink_algorithm)
     {
-        case 0: default:
-            shrunk_image = shrink_image_size(
-                image, width, height, bpp, shrink_width, shrink_height
-            );
-            break;
-        case 1:
-            shrunk_image = shrink_image_factor(
-                image, width, height, &shrink_width, &shrink_height, 5
-            );
+    case 0:
+    default:
+        shrunk_image = shrink_image_size(image, shrink_width, shrink_height);
+        break;
+    case 1:
+        shrunk_image = shrink_image_factor(image, 5);
     }
 
-
-    if (shrunk_image == NULL)
+    if (shrunk_image.pix == NULL)
     {
         fprintf(stderr, "ERR: fault on resize method\n");
     }
-    else 
+    else
     {
-        if (VERBOSE_OUTPUT) printf("Shrunk to size %dx%d\n", shrink_width, shrink_height);
-        stbi_write_jpg(output_image, shrink_width, shrink_height, 3, shrunk_image, DEFAULT_JPG_QUALITY);
+        if (VERBOSE_OUTPUT)
+            print_image_dimensions("Shrunk to size", shrunk_image);
+        write_image(output_image, shrunk_image, DEFAULT_JPG_QUALITY);
     }
 
-    stbi_image_free(image);
-    stbi_image_free(shrunk_image);
+    stbi_image_free(image.pix);
+    stbi_image_free(shrunk_image.pix);
 }
 
-void single_collage(char* input_image, char* output_image, int mode)
+void single_collage(char *input_image, char *output_image, int mode)
 {
     float shrink_factor = 10;
 
-    int width, height, bpp;
-    uint8_t* image = stbi_load(input_image, &width, &height, &bpp, 3);
+    image_t image;
+    image.pix = stbi_load(input_image, &image.w, &image.h, &image.ch, 3);
 
-    if (image == NULL)
+    if (image.pix == NULL)
     {
         printf("input_image wrong\n");
         return;
     }
-    
-    if (VERBOSE_OUTPUT) print_image_dimensions("image", width, height, bpp);
 
-    int shrunk_width, shrunk_height;
-    uint8_t* shrunk_image = shrink_image_factor(
-        image, width, height, &shrunk_width, &shrunk_height, shrink_factor
-    );
-    int squared_size = fmin(shrunk_width, shrunk_height);
-    uint8_t* squared_image = shrink_image_size(
-        image, width, height, bpp, squared_size, squared_size
-    );
+    if (VERBOSE_OUTPUT)
+        print_image_dimensions("image", image);
 
-    stbi_image_free(image);
+    image_t shrunk_image = shrink_image_factor(image, shrink_factor);
 
-    if (VERBOSE_OUTPUT) print_image_dimensions("shrunk image", shrunk_width, shrunk_height, bpp);
+    if (VERBOSE_OUTPUT)
+        print_image_dimensions("shrunk image", shrunk_image);
 
-    int collage_width, collage_height, collage_channels;
-    uint8_t* collage = collage_from_single_image(
-        shrunk_image, shrunk_width, shrunk_height, bpp,
-        squared_image, squared_size, squared_size, bpp,
-        &collage_width, &collage_height, &collage_channels, mode
-    );
+    int image_squared_size = fmin(shrunk_image.w, shrunk_image.h);
+    image_t squared_image = shrink_image_size(image, image_squared_size, image_squared_size);
 
-    if (VERBOSE_OUTPUT) print_image_dimensions("collage single", collage_width, collage_height, collage_channels);
-    
-    stbi_write_jpg(output_image, collage_width, collage_height, collage_channels, collage, DEFAULT_JPG_QUALITY);
+    stbi_image_free(image.pix);
 
-    stbi_image_free(shrunk_image);
-    stbi_image_free(collage);
+    if (VERBOSE_OUTPUT)
+        print_image_dimensions("squared image", squared_image);
+
+    image_t collage = collage_from_single_image(shrunk_image, squared_image, mode);
+
+    if (collage.pix != NULL)
+    {
+        if (VERBOSE_OUTPUT)
+            print_image_dimensions("collage single", collage);
+        write_image(output_image, collage, DEFAULT_JPG_QUALITY);
+        stbi_image_free(collage.pix);
+    }
+
+    stbi_image_free(shrunk_image.pix);
 }
 
 void multi_collage(
-    char* input_image_path, char* output_image_path, char* image_folder,
-    char* collage_size_identifier, int border_size_guidance, int foto_size,
+    char *input_image_path, char *output_image_path, char *image_folder,
+    char *collage_size_identifier, int border_size_guidance, int foto_size,
     int jpg_quality, bool mode_contour)
 {
     int collage_width, collage_height;
@@ -196,7 +192,7 @@ void multi_collage(
     }
     else
     {
-        char* pos_of_x = strchr(collage_size_identifier, 'x');
+        char *pos_of_x = strchr(collage_size_identifier, 'x');
 
         if (pos_of_x != NULL)
         {
@@ -216,14 +212,14 @@ void multi_collage(
         {
             fprintf(stderr, "ERR: collage_size wrong \"%s\"\n", collage_size_identifier);
             return;
-        }        
+        }
     }
 
-    int fotos_per_row = floor((float) collage_width / foto_size);
-    int foto_width = floor((float) collage_width / fotos_per_row),
+    int fotos_per_row = floor((float)collage_width / foto_size);
+    int foto_width = floor((float)collage_width / fotos_per_row),
         foto_height = foto_width;
-    int fotos_horiz = (int) floor((float)(collage_width - 2*border_size_guidance) / foto_width),
-        fotos_vert = (int) floor((float)(collage_height - 2*border_size_guidance) / foto_height);
+    int fotos_horiz = (int)floor((float)(collage_width - 2 * border_size_guidance) / foto_width),
+        fotos_vert = (int)floor((float)(collage_height - 2 * border_size_guidance) / foto_height);
     int collage_inner_width = foto_width * fotos_horiz,
         collage_inner_height = foto_height * fotos_vert;
     int border_left = floor((collage_width - collage_inner_width) / 2.0f),
@@ -236,136 +232,137 @@ void multi_collage(
         printf("collage fotos: %dx%d\n", fotos_horiz, fotos_vert);
         printf("foto dimensions: %dx%d px\n", foto_width, foto_height);
         printf("collage inner dimensions: %dx%d px\n", collage_inner_width, collage_inner_height);
-        printf("border (t,r,b,l): %d, %d, %d, %d px\n", 
-            border_top, border_right, border_bottom, border_left);
+        printf("border (t,r,b,l): %d, %d, %d, %d px\n",
+               border_top, border_right, border_bottom, border_left);
     }
 
     /*  Load creator image and shrink  */
-    if (VERBOSE_OUTPUT) printf("Load main image\n");
+    if (VERBOSE_OUTPUT)
+        printf("Load main image\n");
 
-    int creator_width_original, creator_height_original, creator_bpp;
-    uint8_t* creator_image = stbi_load(input_image_path, &creator_width_original, &creator_height_original, &creator_bpp, 3);
+    image_t creator_image;
+    creator_image.pix = stbi_load(input_image_path, &creator_image.w, &creator_image.h, &creator_image.ch, 3);
 
-    if (creator_image == NULL)
+    if (creator_image.pix == NULL)
     {
         fprintf(stderr, "ERR: input_image wrong\n");
         return;
     }
 
-    if (VERBOSE_OUTPUT) print_image_dimensions("Main image loaded", creator_width_original, creator_height_original, creator_bpp);
-    
-    int creator_width = fotos_horiz * 2,
-        creator_height = fotos_vert * 2;
-    uint8_t* creator_shrunk = shrink_image_size(
-        creator_image, creator_width_original, creator_height_original, creator_bpp,
-        creator_width, creator_height
-    );
+    if (VERBOSE_OUTPUT)
+        print_image_dimensions("Main image loaded", creator_image);
 
-    if (VERBOSE_OUTPUT) print_image_dimensions("Main image shrunk", creator_width, creator_height, creator_bpp);
-    if (DEBUG_OUTPUT) stbi_write_jpg("main-image.jpg", creator_width, creator_height, 3, creator_shrunk, jpg_quality);
-    stbi_image_free(creator_image);
+    image_t creator_shrunk = shrink_image_size(creator_image, fotos_horiz * 2, fotos_vert * 2);
+
+    if (VERBOSE_OUTPUT)
+        print_image_dimensions("Main image shrunk", creator_shrunk);
+    if (DEBUG_OUTPUT)
+        write_image("main-image.jpg", creator_shrunk, jpg_quality);
+    stbi_image_free(creator_image.pix);
 
     /*  Load fotos  */
 
     int foto_count, suitable_foto_count = 0;
-    char** filenames = get_all_filenames(image_folder, &foto_count);
+    char **filenames = get_all_filenames(image_folder, &foto_count);
     if (filenames == NULL)
     {
-        stbi_image_free(creator_shrunk);
+        stbi_image_free(creator_shrunk.pix);
         return;
     }
 
     foto_count = fmin(foto_count, FOTO_LIMIT);
 
-    if (VERBOSE_OUTPUT) printf("%d fotos found\n", foto_count);
+    if (VERBOSE_OUTPUT)
+        printf("%d fotos found\n", foto_count);
 
     uint8_t *all_images[foto_count];
     float images_luminance[foto_count];
-    struct image_structure_t images_structure[foto_count];
+    image_shape_t images_structure[foto_count];
 
-    if (!VERBOSE_OUTPUT) printf("load images (%d)", foto_count);
-    for (int i=0; i<foto_count; i++)
+    if (!VERBOSE_OUTPUT)
+        printf("load images (%d)", foto_count);
+    for (int i = 0; i < foto_count; i++)
     {
-        if (!VERBOSE_OUTPUT) printf(".");
-        if (!VERBOSE_OUTPUT) fflush(stdout);
+        if (!VERBOSE_OUTPUT)
+            printf(".");
+        if (!VERBOSE_OUTPUT)
+            fflush(stdout);
 
-        int width, height, bpp;
+        image_t image;
         char path[200];
         sprintf(path, "%s/%s", image_folder, filenames[i]);
-        uint8_t* image = stbi_load(path, &width, &height, &bpp, 3);
+        image.pix = stbi_load(path, &image.w, &image.h, &image.ch, 3);
 
-        if (image == NULL ||
-            width < foto_width || height < foto_height || bpp != 3)
+        if (image.pix == NULL ||
+            image.w < foto_width || image.h < foto_height || image.ch != 3)
         {
             all_images[i] = NULL;
             images_luminance[i] = 0;
-            images_structure[i] = get_null_structure();
-            if (VERBOSE_OUTPUT) printf("WARN: foto %s not suitable with %dx%d\n", filenames[i], width, height);
+            images_structure[i] = image_shape_default;
+            if (VERBOSE_OUTPUT)
+                printf("WARN: foto %s not suitable with %dx%d\n", filenames[i], image.w, image.h);
             continue;
         }
 
-        uint8_t* image_cut = shrink_image_size(
-            image, width, height, bpp, foto_width, foto_height
-        );        
-        float Y = get_average_luminance(image_cut, foto_width, foto_height, bpp); 
-        all_images[i] = image_cut;
+        image_t image_cut = shrink_image_size(image, foto_width, foto_height);
+        float Y = get_average_luminance(image_cut);
+        all_images[i] = image_cut.pix;
         images_luminance[i] = Y;
-        struct image_structure_t S = get_image_structure(
-            image_cut, foto_width, foto_height, bpp
-        );
+        image_shape_t S = get_image_shape(image_cut);
         images_structure[i] = S;
 
-        if (VERBOSE_OUTPUT) printf("%d image %s with brightness %.2f and struct (%.2f,%.2f,%.2f,%.2f)\n", i, filenames[i], Y, S.y1, S.y2, S.y3, S.y4);
-        stbi_image_free(image);
+        if (VERBOSE_OUTPUT)
+            printf("%d image %s with brightness %.2f and struct (%.2f,%.2f,%.2f,%.2f)\n", i, filenames[i], Y, S.y1, S.y2, S.y3, S.y4);
+        stbi_image_free(image.pix);
         suitable_foto_count++;
     }
 
-    if (!VERBOSE_OUTPUT) printf("\n");
+    if (!VERBOSE_OUTPUT)
+        printf("\n");
 
-    if (suitable_foto_count == 0) 
+    if (suitable_foto_count == 0)
     {
         fprintf(stderr, "ERR: probably wrong image folder\n");
         free(filenames);
         return;
-    } 
-
+    }
 
     /*  Create collage  */
 
-    uint8_t* collage_inner = collage_from_multiple_images(
-        creator_shrunk, creator_width, creator_height, 3,
-        all_images, foto_width, foto_height, foto_count,
-        images_luminance, images_structure, mode_contour
-    );
-    stbi_image_free(creator_shrunk);
-    for (int i=0; i<foto_count; i++) stbi_image_free(all_images[i]);
-    if (VERBOSE_OUTPUT) printf("Collage created with %dx%d images\n", fotos_horiz, fotos_vert);
+    image_t collage_inner = collage_from_multiple_images(
+        creator_shrunk, all_images, foto_width, foto_height, foto_count,
+        images_luminance, images_structure, mode_contour);
+    stbi_image_free(creator_shrunk.pix);
+    for (int i = 0; i < foto_count; i++)
+        stbi_image_free(all_images[i]);
+    if (VERBOSE_OUTPUT)
+        printf("Collage created with %dx%d images\n", fotos_horiz, fotos_vert);
 
     if (border_size_guidance == 0)
     {
-        stbi_write_jpg(output_image_path, collage_inner_width, collage_inner_height, 3, collage_inner, jpg_quality);
+        write_image(output_image_path, collage_inner, jpg_quality);
     }
     else
     {
         /*  Add border  */
 
-        if (DEBUG_OUTPUT) stbi_write_jpg(output_image_path, collage_inner_width, collage_inner_height, 3, collage_inner, jpg_quality);
-        if (VERBOSE_OUTPUT) printf("add border: %d %d %d %d px\n", border_top, border_right, border_bottom, border_left);
-        
-        uint8_t* collage_with_border = add_border(
-            collage_inner, collage_inner_width, collage_inner_height, 3, 
-            border_top, border_bottom, border_left, border_right, 
-            255, 255, 255
-        );
-        stbi_write_jpg(output_image_path, collage_width, collage_height, 3, collage_with_border, jpg_quality);
-        stbi_image_free(collage_with_border);
+        if (DEBUG_OUTPUT)
+            write_image(output_image_path, collage_inner, jpg_quality);
+        if (VERBOSE_OUTPUT)
+            printf("add border: %d %d %d %d px\n", border_top, border_right, border_bottom, border_left);
+
+        image_t collage_with_border = add_border(
+            collage_inner, border_top, border_bottom, border_left, border_right,
+            255, 255, 255);
+        write_image(output_image_path, collage_with_border, jpg_quality);
+        stbi_image_free(collage_with_border.pix);
     }
 
-    stbi_image_free(collage_inner);
+    stbi_image_free(collage_inner.pix);
     free(filenames);
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     if (argc < 4)
     {
@@ -376,7 +373,7 @@ int main(int argc, char* argv[])
     clock_t start_time = clock();
     int no_options = 0;
 
-    for (int i=1; i<4 && i<argc; i++)
+    for (int i = 1; i < 4 && i < argc; i++)
     {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
         {
@@ -406,7 +403,7 @@ int main(int argc, char* argv[])
     if (strcmp(action, "multi") == 0 && argc >= 7)
     {
         char image_folder[FILENAME_LENGTH], collage_size_id[20], jpg_quality_str[5];
-        int jpg_quality; 
+        int jpg_quality;
         strcpy(image_folder, argv[3 + no_options]);
         strcpy(output_image, argv[4 + no_options]);
         strcpy(collage_size_id, argv[5 + no_options]);
@@ -423,8 +420,7 @@ int main(int argc, char* argv[])
         multi_collage(
             input_image, output_image, image_folder,
             collage_size_id, 0, foto_size,
-            jpg_quality, mode_contour
-        );
+            jpg_quality, mode_contour);
     }
     else if (strcmp(action, "shrink") == 0)
     {
@@ -450,6 +446,6 @@ int main(int argc, char* argv[])
     double exec_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     printf("Time: %.4f s, ", exec_time);
     printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0d);
-    
+
     return 0;
 }
