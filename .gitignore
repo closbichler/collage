@@ -1,5 +1,6 @@
 .vscode/
 collage
+collage.o
 photos/*
 /*.jpg
 
