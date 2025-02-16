@@ -1,44 +1,15 @@
-#include "collage.h"
+#define _USE_MATH_DEFINES
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 
+#include "collage.h"
+
 static bool DEBUG = false;
-static bool DEBUG_MALLOC = false;
 unsigned long TOTAL_MALLOC = 0;
 
 /* Helper methods */
-
-void print_malloc(size_t size, bool print_always)
-{
-    TOTAL_MALLOC += size;
-
-    if (DEBUG_MALLOC || print_always)
-    {
-        printf("MALLOC: ");
-        if (size < 1000)
-        {
-            printf("%lu B", size);
-        }
-        else if (size < 1000000)
-        {
-            double kb = (size) / 1000.0d;
-            printf("%.4f KB", kb);
-        }
-        else
-        {
-            double mb = (size) / 1000000.0d;
-            printf("%.4f MB", mb);
-        }
-        printf("\n");
-    }
-}
-
-void print_malloc_error(size_t size)
-{
-    fprintf(stderr, "ERR: malloc failed with size %lu\n", size);
-}
 
 void set_debug(bool debug)
 {
@@ -208,12 +179,6 @@ size_t get_image_size(image_t image)
     return image.w * image.h * image.ch;
 }
 
-bool write_image(char *output_path, image_t image, int quality)
-{
-    stbi_write_jpg(output_path, image.w, image.h, image.ch, image.pix, quality);
-    return true;
-}
-
 int match_image_by_luminance(float Y, float *images_luminance, int count,
                              int not_allowed_1, int not_allowed_2)
 {
@@ -282,7 +247,6 @@ image_t shrink_image_factor(image_t image, int factor)
     int shrunk_size = get_image_size(shrunk);
     int diff_width = image.w - shrunk.w * factor;
 
-    print_malloc(shrunk_size, false);
     shrunk.pix = malloc(shrunk_size);
 
     uint8_t *img_i = image.pix, *shrunk_img_i = shrunk.pix;
@@ -336,7 +300,6 @@ image_t shrink_image_size(image_t image, int shrunk_width, int shrunk_height)
 
     image_t shrunk = {NULL, shrunk_width, shrunk_height, image.ch};
     size_t shrunk_size = get_image_size(shrunk);
-    print_malloc(shrunk_size, false);
     shrunk.pix = malloc(shrunk_size);
 
     for (int y = 0; y < shrunk_height; y++)
@@ -434,11 +397,9 @@ image_t collage_from_single_image(image_t base, image_t paste, int mode)
     collage.ch = paste.ch;
 
     size_t collage_size = get_image_size(collage);
-    print_malloc(collage_size, false);
     collage.pix = malloc(collage_size);
     if (collage.pix == NULL)
     {
-        print_malloc_error(collage_size);
         return image_default;
     }
 
@@ -491,7 +452,6 @@ image_t collage_from_multiple_images(
     collage.ch = creator.ch;
 
     size_t collage_size = get_image_size(collage);
-    print_malloc(collage_size, false);
     collage.pix = malloc(collage_size);
 
     image_shape_t white_structure = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -579,7 +539,6 @@ image_t add_border(
             image.ch};
 
     size_t new_image_size = get_image_size(new_image);
-    print_malloc(new_image_size, false);
     new_image.pix = malloc(new_image_size);
 
     uint8_t *img_i = image.pix, *img_border_i = new_image.pix;

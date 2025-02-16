@@ -57,7 +57,6 @@ char **get_all_filenames(char *folder, int *file_count)
         (*file_count)++;
     rewinddir(dir);
 
-    print_malloc(*file_count * sizeof(char *), false);
     char **filenames = malloc(*file_count * sizeof(char *));
 
     int i = 0;
@@ -66,7 +65,6 @@ char **get_all_filenames(char *folder, int *file_count)
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
 
-        print_malloc(FILENAME_LENGTH * sizeof(char), false);
         filenames[i] = malloc(FILENAME_LENGTH * sizeof(char));
         strcpy(filenames[i], ent->d_name);
         i++;
@@ -74,6 +72,12 @@ char **get_all_filenames(char *folder, int *file_count)
 
     closedir(dir);
     return filenames;
+}
+
+bool write_image(char *output_path, image_t image, int quality)
+{
+    stbi_write_jpg(output_path, image.w, image.h, image.ch, image.pix, quality);
+    return true;
 }
 
 /* Implementation */
@@ -445,7 +449,7 @@ int main(int argc, char *argv[])
     clock_t end_time = clock();
     double exec_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     printf("Time: %.4f s, ", exec_time);
-    printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0d);
+    printf("Memory: %.4f MB\n", TOTAL_MALLOC / 1000000.0);
 
     return 0;
 }

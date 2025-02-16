@@ -70,7 +70,6 @@ bool is_default_shape(image_shape_t s);
 bool check_image_dimensions(image_t image);
 void print_image_dimensions(char *name, image_t image);
 size_t get_image_size(image_t image);
-bool write_image(char *name, image_t image, int quality);
 
 int match_image_by_luminance(float Y, float *images_luminance, int count,
                              int not_allowed_1, int not_allowed_2);
